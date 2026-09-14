@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 8 课：9 章功能测试报告骨架——三流合一视角的工程表达</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 8 课：9 章功能测试报告骨架——三流合一视角的工程表达</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 8 课</span>
+    <span class="tag">难度 ★★★☆☆</span>
+    <span class="tag">时长 35 分钟</span>
+    <span class="tag">实战对象 M1-D3-001 功能测试报告骨架</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L07 缺陷库 + L06 用例库）</a></li>
+      <li><a href="#sec2">为什么先有骨架后填数据（"边执行边写" vs "一次性写"）</a></li>
+      <li><a href="#sec3">9 章骨架总览（mermaid 章节树）</a></li>
+      <li><a href="#sec4">第 1-3 章：测试金字塔基础层（概述 / 方法 / 环境）</a></li>
+      <li><a href="#sec5">第 4-5 章：测试金字塔中间层（用例 / 缺陷统计）</a></li>
+      <li><a href="#sec6">第 6 章：测试金字塔观察层——三流合一视角 6 步主链路</a></li>
+      <li><a href="#sec7">第 7-8 章：测试金字塔顶层（风险 / 结论）</a></li>
+      <li><a href="#sec8">第 9 章：附录——报告的索引与交接</a></li>
+      <li><a href="#sec9">报告评审 8 条 Checklist</a></li>
+      <li><a href="#sec10">课堂小测 + 收官提示</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L07 缺陷库 + L06 用例库）</h2>
+  <p>前 5 课搭了业务/用例/流程的认知，L06/L07 把 150 条用例 + 18 个缺陷两端都落地了。本课要把这堆离散产出<strong>聚成一份能向 PM/开发汇报的文档</strong>——这就是功能测试报告。</p>
+  <ul>
+    <li><strong>第 6 课（150 条用例库）</strong>：登录/注册 40 + 商品 30 + 购物车 20 + 订单/支付 25 + 会员/权限 15 + 兼容性/异常 20，按 7 模块切分。</li>
+    <li><strong>第 7 课（18 缺陷库）</strong>：Critical 3（鉴权缺拦截 / 状态机窗口 / 支付事务）+ Major 6 + Minor 6 + Trivial 3，按 Controller 静态分析产出。</li>
+    <li><strong>本课（9 章骨架）</strong>：把 150 用例 + 18 缺陷 + 9 章骨架三件套<strong>串成一份 Markdown 报告</strong>——即 <code>test-cases/M1-D3-001/functional-test-report.md</code>（17 KB / 384 行 / 9 章 28 子节）。</li>
+  </ul>
+  <p><strong>本课的核心论点</strong>：测试报告不是"测试结束后写一份文档"，而是从 D2 用例设计阶段就<strong>并行维护的"状态看板"</strong>。骨架的 9 章结构对应测试金字塔的 3 层（用例统计 / 缺陷统计 / 结论分析）——底座是设计（1-3 章），中层是数据（4-5 章），顶层是判断（6-8 章），地基是索引（9 章）。</p>
+
+  <h2 id="sec2">2. 为什么先有骨架后填数据</h2>
+  <p>两种写法决定一份报告的命运：</p>
+  <table>
+    <thead><tr><th>写法</th><th>过程</th><th>结果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>边执行边写（推荐）</strong></td>
+        <td>D2 设计阶段就拉出 9 章骨架占位符（如 4.2 表的"已执行"列先空），每跑完一批用例就回填 actual</td>
+        <td>骨架版在 D2 末已成稿（17 KB / 384 行），数据回填只发生在 §4.5/§5.2 几处；执行完即出 v1.0</td>
+      </tr>
+      <tr>
+        <td><strong>一次性写（反例）</strong></td>
+        <td>用例跑完、缺陷归档完、复盘会开完才动笔</td>
+        <td>经常卡在 §6"结果分析"——写报告的人不记得 4 周前每条用例为什么通过/失败；交一份"数字漂亮但判断空"的报告</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">核心洞察（来自执行复盘）</div>
+    测试报告的真正价值不是"通过率 95%"这个数字，而是<strong>判断</strong>：哪条主链路断在哪一步、为什么断、风险敞口有多大、发布要不要等。判断只能在执行<strong>当下</strong>形成，事后追写就丢了。<strong>骨架先行的本质是把"判断的容器"提前建好——每跑一条用例都顺手把容器填一行</strong>。
+  </div>
+  <p>M1-D3-001 报告骨架就是这种写法的产物：</p>
+  <ul>
+    <li><strong>v0.1 骨架版</strong>（D3 第 2 天）：9 章全部成稿 + 28 个子节 + 11 张表头 + 占位符"(待回填)"——给 Worker A / Worker B 提供<strong>回填槽位</strong>。</li>
+    <li><strong>v1.0 数据版</strong>（D1 环境跑通后，由 director 集成）：把 Worker A 跑出的 actual 与 Worker B 提交的 18 条 BUG 编号，<strong>原地替换占位符</strong>即得。</li>
+  </ul>
+  <p>从 v0.1 → v1.0 是<strong>原地替换</strong>，不是重写——这就是骨架先行的工程价值。</p>
+
+  <h2 id="sec3">3. 9 章骨架总览（mermaid 章节树）</h2>
+  <p>来源：<code>test-cases/M1-D3-001/functional-test-report.md</code> 全文 384 行 28 子节。骨架严格对齐该报告实际章节，<strong>不掺个人发挥</strong>：</p>
+  <pre class="mermaid">
+flowchart TD
+    R["功能测试报告<br/>384 行 / 17 KB"]
+    R --> A["第 1-3 章<br/>基础层（设计）"]
+    R --> B["第 4-5 章<br/>中间层（数据）"]
+    R --> C["第 6 章<br/>观察层（判断）"]
+    R --> D["第 7-8 章<br/>顶层（决策）"]
+    R --> E["第 9 章<br/>地基（索引）"]
+
+    A --> A1["1. 概述<br/>1.1-1.3"]
+    A --> A2["2. 方法<br/>2.1-2.3"]
+    A --> A3["3. 环境<br/>3.1-3.4"]
+    B --> B1["4. 用例统计<br/>4.1-4.6"]
+    B --> B2["5. 缺陷统计<br/>5.1-5.6"]
+    C --> C1["6. 结果分析<br/>6.1-6.6"]
+    D --> D1["7. 风险<br/>7.1-7.3"]
+    D --> D2["8. 结论<br/>8.1-8.2"]
+    E --> E1["9. 附录<br/>9.1-9.4"]
+
+    style A fill:#fef9e7,stroke:#888
+    style B fill:#e8f4f8,stroke:#888
+    style C fill:#fdebd0,stroke:#888
+    style D fill:#fadbd8,stroke:#888
+    style E fill:#eafaf1,stroke:#888
+  </pre>
+  <p><strong>结构纪律</strong>：</p>
+  <ul>
+    <li><strong>9 章固定</strong>——少于 9 章少"风险/遗留"或"附录索引"，多于 9 章重复（功能报告不写性能报告，那是 M3 阶段产物）。</li>
+    <li><strong>28 子节</strong>——§1(3) + §2(3) + §3(4) + §4(6) + §5(6) + §6(6) + §7(3) + §8(2) + §9(4)。子节数固定意味着<strong>数据回填槽位固定</strong>，Worker A / Worker B 知道自己该往哪一行填 actual。</li>
+    <li><strong>5 视角对应 5 个表头</strong>：模块视角（§4.2）/ 类型视角（§4.3）/ 优先级视角（§4.4）/ 严重等级视角（§5.2）/ 三流合一视角（§6.1）。</li>
+  </ul>
+
+  <h2 id="sec4">4. 第 1-3 章：测试金字塔基础层（概述 / 方法 / 环境）</h2>
+  <p>来源：<code>functional-test-report.md</code> 第 10-118 行。基础层功能：<strong>5 分钟内让读者知道"测什么、怎么测、在什么环境"</strong>。</p>
+  <h3>4.1 §1 概述——3 个子节回答"测什么"</h3>
+  <table>
+    <thead><tr><th>子节</th><th>回答的问题</th><th>关键内容</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>1.1 项目背景</strong></td>
+        <td>这是个什么项目？</td>
+        <td>mall4j 是 B2C 单商户开源电商（AGPLv3），子模块：<code>yami-shop-api</code>(:8086) + <code>yami-shop-admin</code>(:8085) + <code>yami-shop-security-admin</code>（Sa-Token 鉴权）+ 前端三端</td>
+      </tr>
+      <tr>
+        <td><strong>1.2 测试目标</strong></td>
+        <td>为什么测？</td>
+        <td>① 验证<strong>三流合一</strong>主链路正确性（<code>CONTEXT.md §1</code>）② 验证鉴权链 4 类场景 ③ 验证幂等性 3 类场景 ④ 暴露 18 个缺陷 ⑤ 形成首份可汇报的测试报告</td>
+      </tr>
+      <tr>
+        <td><strong>1.3 测试范围</strong></td>
+        <td>测什么 / 不测什么？</td>
+        <td>In-scope：150 条用例 6 模块；Out-of-scope：M4 mall-ai / 后台高级权限 / 性能压测（M3 阶段）/ 第三方支付真实通道</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>要点</strong>：1.3 的 Out-of-scope 表是<strong>全报告最容易被抠的表</strong>——PM 拿着 Out-of-scope 反问"为什么不测 X"，你得有理有据。M4 mall-ai 不测是因为 <code>CONTEXT.md §4</code> 明确划入"❌ 不测"——<strong>判断有源</strong>是测试报告的隐性质量指标。</p>
+
+  <h3>4.2 §2 测试方法——设计 / 落地 / 工具三层</h3>
+  <table>
+    <thead><tr><th>设计方法</th><th>适用模块</th><th>D2</th><th>D3</th></tr></thead>
+    <tbody>
+      <tr><td>等价类</td><td>参数校验、分页边界</td><td>18</td><td>12</td></tr>
+      <tr><td>边界值</td><td>密码长度、分页 size/0/99999</td><td>14</td><td>8</td></tr>
+      <tr><td>场景法</td><td>主链路、状态机切换</td><td>32</td><td>22</td></tr>
+      <tr><td>状态机</td><td>订单生命周期 6 状态 9 迁移</td><td>0</td><td>10</td></tr>
+      <tr><td>判定表</td><td>优惠券叠加、支付方式</td><td>0</td><td>5</td></tr>
+      <tr><td>安全测试</td><td>SQL 注入 / XSS / CSRF / 鉴权越权</td><td>8</td><td>4</td></tr>
+      <tr><td>并发测试</td><td>库存超卖、token 颁发幂等</td><td>5</td><td>3</td></tr>
+      <tr><td>兼容性测试</td><td>Chrome / Edge / Safari × H5 / 小程序</td><td>0</td><td>6</td></tr>
+    </tbody>
+  </table>
+  <p>§2.2 落地方法：手工测试（主链路 6 步 + 异常路径，占 40%）+ Postman（接口批量）+ pytest + requests（M2 阶段）+ Playwright（UI 自动化）。§2.3 工具链：Chrome DevTools / Postman / Charles / IDEA / Knife4j / GitHub Issues。</p>
+  <p><strong>要点</strong>：方法列表不是越全越好，而是<strong>与第 4 章用例分布一一对应</strong>——§4.3 类型分布表里 scenario=54 / boundary=22 / equivalence=30 / security=12 / compatibility=6 / concurrency=8 / 其他 18 = 150 条，每种方法都"贡献"了多少用例要写清楚。</p>
+
+  <h3>4.3 §3 测试环境——4 子节</h3>
+  <ul>
+    <li><strong>3.1 硬件</strong>：CPU AMD Ryzen 7 7840HS（8 核 16 线程）+ Memory 16GB DDR5 + Disk 512GB NVMe SSD（≥100GB 可用）</li>
+    <li><strong>3.2 软件</strong>：JDK 17 Temurin + Maven 3.9 + Node 18 LTS + MySQL 8.0 + Redis 7 + IDEA Ultimate + Docker Desktop 4.x</li>
+    <li><strong>3.3 网络</strong>：千兆内网；Charles Throttle 模拟 100 kbps / 500ms latency；手动断网验证本地缓存</li>
+    <li><strong>3.4 测试账号</strong>：admin / test001 / test003 / test002 / test004 五种状态（status 0/1/2）的账号矩阵</li>
+  </ul>
+  <p><strong>要点</strong>：3.2 明确写"支付 / 物流通道 = Mock 实现，不接真实微信/支付宝/顺丰"——这一句话决定了 §6.4 性能瓶颈初步观察的<strong>局限性声明</strong>，也决定了 §7.1 未覆盖范围里"第三方支付真实通道 = 不测"是<strong>合理且已声明</strong>的。</p>
+
+  <h2 id="sec5">5. 第 4-5 章：测试金字塔中间层（用例 / 缺陷统计）</h2>
+  <p>中间层是报告的<strong>数据中心</strong>——读者拿到报告，80% 的数字都来自这两章。来源：<code>functional-test-report.md</code> §4（121-179 行）+ §5（182-246 行）。</p>
+
+  <h3>5.1 §4 用例统计——6 子节 = 6 张表</h3>
+  <p>§4 的 6 个子节对应 6 个视角，每张表都用占位符"(待回填)"标注，<strong>等 Worker A 执行完用例后回填 actual</strong>：</p>
+  <table>
+    <thead><tr><th>子节</th><th>视角</th><th>表头列数</th><th>示例（v0.1 占位）</th></tr></thead>
+    <tbody>
+      <tr><td><strong>4.1 总览</strong></td><td>数字总览</td><td>3</td><td>D2 实际 90 + D3 预计 60 = 150</td></tr>
+      <tr><td><strong>4.2 模块分布</strong></td><td>6 模块视角</td><td>8</td><td>登录 40 / 商品 30 / 购物车 20 / 订单 25 / 会员 15 / 兼容性 20</td></tr>
+      <tr><td><strong>4.3 类型分布</strong></td><td>8 方法视角</td><td>4</td><td>scenario 54 / boundary 22 / equivalence 30 / security 12 / compatibility 6 / concurrency 8 / 其他 18</td></tr>
+      <tr><td><strong>4.4 优先级分布</strong></td><td>P0/P1/P2 视角</td><td>5</td><td>P0=主链路+鉴权+支付核心 / P1=边界+异常+安全 / P2=兼容性+弱网+探索</td></tr>
+      <tr><td><strong>4.5 执行结果</strong></td><td>4 状态视角</td><td>4</td><td>✅ Pass / ❌ Fail / ⛔ Blocked / ⏭ Skip</td></tr>
+      <tr><td><strong>4.6 用例样例</strong></td><td>1-2 行举例</td><td>8</td><td>LOGIN-001 正常账号密码 + ORDER-001 下单主链路</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">常见错误</div>
+    §4 写成"用例总览段+大段文字描述"——文字描述不可索引、不可比对。报告的核心读者是 PM + 开发，<strong>他们只会扫表</strong>。6 张表必须老老实实给出来，不能合并成"概览段"。
+  </div>
+
+  <h3>5.2 §5 缺陷统计——6 子节 = 6 张表</h3>
+  <p>§5 与 §4 镜像——但视角换成缺陷三轴（严重等级 / 模块 / 类型）+ TOP 5 + 修复率。</p>
+  <table>
+    <thead><tr><th>子节</th><th>视角</th><th>v0.1 占位 / v1.0 回填示例</th></tr></thead>
+    <tbody>
+      <tr><td><strong>5.1 总览</strong></td><td>数字总览</td><td>目标 18 / 当前 (待回填) / 修复率 (待回填)</td></tr>
+      <tr><td><strong>5.2 严重等级分布</strong></td><td>4 等级</td><td>Critical 3 / Major 6 / Minor 6 / Trivial 3 = 18（v0.1 按 bug-list.md 静态分析锁定）</td></tr>
+      <tr><td><strong>5.3 模块分布</strong></td><td>6 模块视角</td><td>登录注册 4 / 商品 3 / 购物车 3 / 订单支付 5 / 会员权限 3 / 兼容性 0 = 18</td></tr>
+      <tr><td><strong>5.4 类型分布</strong></td><td>6 类型视角</td><td>功能 7 / 性能 3 / 安全 3 / 兼容性 2 / 易用性 2 / 边界 1 = 18</td></tr>
+      <tr><td><strong>5.5 TOP 5 关键缺陷</strong></td><td>细节展开</td><td>BUG-002 改密未鉴权 / BUG-011 状态机窗口 / BUG-013 支付事务 三个 Critical 居首</td></tr>
+      <tr><td><strong>5.6 修复率</strong></td><td>4 状态</td><td>总 18 / 已修复 (待回填) / 修复中 (待回填) / 未修复 (待回填) / 修复率 (待回填)%</td></tr>
+    </tbody>
+  </table>
+  <p><strong>要点</strong>：5.5 的 TOP 5 必须是真实存在的 Bug ID，<strong>不能写"BUG-001 严重等级 (待回填)"</strong>——这与本报告"<strong>预测缺陷库</strong>"的 §5.2 / §5.3 形成对照：§5.2/§5.3 来自 <code>bug-list.md</code> 静态分析的预测（v0.1 即有值），§5.5 来自 Worker A 跑用例时实际遇到的 TOP 5（v1.0 才填）。<strong>同一份报告里"预测"与"实测"分两层</strong>——这种诚实是测试报告的可信度来源。</p>
+
+  <h2 id="sec6">6. 第 6 章：测试金字塔观察层——三流合一视角 6 步主链路</h2>
+  <p>来源：<code>functional-test-report.md</code> §6（249-301 行）+ <code>CONTEXT.md §1 三流合一</code>。<strong>§6 是全报告的核心</strong>——把"数字"转化为"判断"。</p>
+  <p><strong>核心论点</strong>：单步通过 ≠ 业务通过。一笔订单必须<strong>资金流 + 信息流 + 物流</strong>同步前进，6 步全绿才算业务通过（来自 <code>CONTEXT.md §1</code>）。</p>
+
+  <h3>6.1 §6.1 主链路通过情况——6 步 × 三流合一视角</h3>
+  <p>主链路 = 登录 → 加购 → 下单 → 支付 → 收货 → 评价，对应 6 步。</p>
+  <pre class="mermaid">
+flowchart LR
+    S1["1. 登录<br/>LOGIN-001<br/>资金流起点"] --> S2["2. 加购<br/>CART-001<br/>信息流"]
+    S2 --> S3["3. 下单<br/>ORDER-001<br/>资金流+信息流"]
+    S3 --> S4["4. 支付<br/>PAY-001<br/>资金流核心"]
+    S4 --> S5["5. 收货<br/>DELIVERY-001<br/>物流"]
+    S5 --> S6["6. 评价<br/>COMMENT-001<br/>信息流闭环"]
+    S6 -.闭环.-> S3
+
+    style S1 fill:#d4e6f1,stroke:#2874a6
+    style S4 fill:#fadbd8,stroke:#c0392b
+    style S5 fill:#d5f5e3,stroke:#1e8449
+  </pre>
+  <table>
+    <thead><tr><th>步骤</th><th>对应模块</th><th>用例编号</th><th>三流归属</th><th>通过</th><th>失败</th></tr></thead>
+    <tbody>
+      <tr><td>1. 登录</td><td>登录 / 注册</td><td>LOGIN-001</td><td>资金流起点（拿 token）</td><td>(待回填)</td><td>(待回填)</td></tr>
+      <tr><td>2. 加购</td><td>购物车</td><td>CART-001</td><td>信息流</td><td>(待回填)</td><td>(待回填)</td></tr>
+      <tr><td>3. 下单</td><td>订单</td><td>ORDER-001</td><td>资金流 + 信息流</td><td>(待回填)</td><td>(待回填)</td></tr>
+      <tr><td>4. 支付</td><td>支付</td><td>PAY-001</td><td>资金流核心</td><td>(待回填)</td><td>(待回填)</td></tr>
+      <tr><td>5. 收货</td><td>物流</td><td>DELIVERY-001</td><td>物流</td><td>(待回填)</td><td>(待回填)</td></tr>
+      <tr><td>6. 评价</td><td>信息流</td><td>COMMENT-001</td><td>信息流闭环</td><td>(待回填)</td><td>(待回填)</td></tr>
+    </tbody>
+  </table>
+  <p><strong>三流合一的应用</strong>：步骤 3"下单"既涉及资金流（订单金额冻结）也涉及信息流（订单详情落库 + 通知），必须<strong>两流同时绿</strong>才算通过；如果订单金额冻结成功但订单详情写入失败（或反之），单步失败——这就是"单步通过 ≠ 业务通过"的工程含义。</p>
+
+  <h3>6.2 §6.2 鉴权链通过情况——4 类场景（来自 <code>CONTEXT.md §3.1</code>）</h3>
+  <table>
+    <thead><tr><th>场景</th><th>用例覆盖</th><th>通过</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>不带 token → 401</td><td>鉴权链 4 类</td><td>(待回填)</td><td>最基本</td></tr>
+      <tr><td>token 过期 → 401</td><td>同上</td><td>(待回填)</td><td>需清除 Redis 缓存</td></tr>
+      <tr><td>普通用户访问 admin 接口 → 403</td><td>Sa-Token 角色检查</td><td>(待回填)</td><td>对应 <code>bug-list.md</code> BUG-002 改密未鉴权</td></tr>
+      <tr><td>多角色用户 → 按角色-菜单表过滤</td><td>角色绑定</td><td>(待回填)</td><td>RBAC</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.3 §6.3 幂等性通过情况——3 类场景（来自 <code>CONTEXT.md §3.2</code>）</h3>
+  <table>
+    <thead><tr><th>场景</th><th>用例编号</th><th>通过</th><th>备注</th></tr></thead>
+    <tbody>
+      <tr><td>同一订单号重复下单</td><td>ORDER-IDEMPOTENT-*</td><td>(待回填)</td><td>防重下单</td></tr>
+      <tr><td>同一支付回调多次到达</td><td>PAY-CALLBACK-*</td><td>(待回填)</td><td>对应 BUG-013 支付事务未声明</td></tr>
+      <tr><td>同一退款请求多次提交</td><td>REFUND-IDEMPOTENT-*</td><td>(待回填)</td><td>防双重退款</td></tr>
+    </tbody>
+  </table>
+
+  <h3>6.4 §6.4 性能 + §6.5 兼容性 + §6.6 关键发现</h3>
+  <p>§6.4 性能瓶颈<strong>仅作初步观察</strong>，不下结论（性能压测是 M3 阶段 JMeter / Locust 的事）。关注 4 个方法：<code>ProdController#pageProd</code>（N+1）/ <code>SkuController#getSkuList</code>（缓存命中率）/ <code>ShopCartController#info</code>（大列表加载）/ <code>OrderController#confirmOrder</code>（事务耗时）。</p>
+  <p>§6.5 兼容性观察使用 <code>CONTEXT.md §3 可测点速查</code> 的浏览器维度（Chrome 120 / Edge 120 / Safari 17 / Firefox 121）+ 移动端维度（mall4uni / mall4m / mall4v）+ 编码维度（UTF-8 中文 / Emoji / 超长 256 字符商品名）。</p>
+  <p>§6.6 关键发现是 PM/开发<strong>必读</strong>子节——前面 5 张表给数字，§6.6 给判断。v0.1 时本节是空的，v1.0 时由 director 在集成数据后写。典型内容：</p>
+  <ul>
+    <li><strong>主链路整体判断</strong>：6 步全绿 → 业务通过；6 步里 X 步红 → 阻塞发布；6 步里 X ≤ 1 步黄（Major）→ 有条件发布</li>
+    <li><strong>鉴权链判断</strong>：4 类里若有 Critical 失败（如 BUG-002 改密未鉴权复现成功）→ 阻塞发布</li>
+    <li><strong>幂等性判断</strong>：3 类里任一失败 → 阻塞发布（资金安全底线）</li>
+    <li><strong>性能 / 兼容性观察</strong>：列出"观察项"，不下"上线 OK"的结论（声明交给 M3 / 兼容矩阵任务）</li>
+  </ul>
+
+  <h2 id="sec7">7. 第 7-8 章：测试金字塔顶层（风险 / 结论）</h2>
+  <p>来源：<code>functional-test-report.md</code> §7（304-320 行）+ §8（323-340 行）。顶层是<strong>决策层</strong>——把 §6 的判断翻译成"发不发 / 怎么发"。</p>
+
+  <h3>7.1 §7 风险与遗留——3 类风险</h3>
+  <table>
+    <thead><tr><th>子节</th><th>回答的问题</th><th>内容</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>7.1 测试未覆盖范围</strong></td>
+        <td>哪些没测？</td>
+        <td>M4 mall-ai（<code>CONTEXT.md §4</code> 划入"❌ 不测"）/ 后台高级权限 / 性能压测（M3 阶段）/ 第三方支付真实通道 / i18n</td>
+      </tr>
+      <tr>
+        <td><strong>7.2 待复现缺陷清单</strong></td>
+        <td>哪些缺陷还没复现成功？</td>
+        <td>占位表——Worker A 跑用例时如遇到无法稳定复现的缺陷登记在此</td>
+      </tr>
+      <tr>
+        <td><strong>7.3 阻塞发布的问题</strong></td>
+        <td>Critical 等级未修复项有哪些？</td>
+        <td>占位段——一旦出现 Critical 未修复项，本节是该缺陷的"墓碑"，决策者看到它就停手</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>要点</strong>：7.3 是测试报告的"<strong>熔断器</strong>"——只要有一条 Critical 未修复，整份报告的 §8.1 结论必须落到"不建议发布"。这是测试报告对项目的<strong>否决权</strong>，不可让渡。</p>
+
+  <h3>7.2 §8 测试结论——发不发 / 怎么发</h3>
+  <table>
+    <thead><tr><th>子节</th><th>回答的问题</th><th>判定规则（v0.1 已写死，v1.0 只填结论）</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>8.1 是否达到发布标准</strong></td>
+        <td>发不发？</td>
+        <td>① 通过率 ≥ 95% 且 Critical 全部修复 → <strong>建议发布</strong><br/>② 通过率 85%-95% 或存在 Major 未修复 → <strong>有条件发布</strong>（附修复计划）<br/>③ 通过率 &lt; 85% 或存在 Critical 未修复 → <strong>不建议发布</strong></td>
+      </tr>
+      <tr>
+        <td><strong>8.2 下一步建议</strong></td>
+        <td>怎么发？发完干什么？</td>
+        <td>① 修复优先级（按 5.5 TOP 5 先修 Critical/Major）② 回归范围（对应模块 P0 + 相关 P1）③ 自动化覆盖（150 条中可自动化部分 → pytest + Playwright）④ CI（GitHub Actions + Allure）⑤ 监控告警（Prometheus + 业务异常）</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">数字纪律（来自 PROJECT_TARGET_BOOK §5.1）</div>
+    §8.1 的判定规则里"通过率 ≥ 95%"是<strong>口径</strong>，不是"凑数字"。报告里禁止写"通过率 100%"——如果 §4.5 实际回填得到 100%，一定是数据造假（150 条用例不可能全过）。诚实报告的通过率通常落在 70%-90% 之间，剩下的留给修复 + 回归 + M3 复测。
+  </div>
+
+  <h2 id="sec8">8. 第 9 章：附录——报告的索引与交接</h2>
+  <p>来源：<code>functional-test-report.md</code> §9（343-376 行）。附录是<strong>地基</strong>——读者要查某条用例、某个缺陷、某步数据准备时，<strong>只看附录</strong>就能找到对应文件。</p>
+
+  <h3>8.1 §9.1 用例库索引 + §9.2 缺陷库索引</h3>
+  <table>
+    <thead><tr><th>附录子节</th><th>索引对象</th><th>路径</th></tr></thead>
+    <tbody>
+      <tr><td>9.1.1 D2 用例 MD</td><td>90 条用例</td><td><code>test-cases/M1-D2-001/M1-D2-001-testcases.md</code></td></tr>
+      <tr><td>9.1.2 D2 用例 CSV</td><td>Excel 可开</td><td><code>test-cases/M1-D2-001/M1-D2-001-testcases.csv</code></td></tr>
+      <tr><td>9.1.3 D3 用例 MD</td><td>60 条用例</td><td><code>test-cases/M1-D3-001/M1-D3-001-testcases.md</code></td></tr>
+      <tr><td>9.1.4 D3 用例 CSV</td><td>Excel 可开</td><td><code>test-cases/M1-D3-001/M1-D3-001-testcases.csv</code></td></tr>
+      <tr><td>9.1.5 用例生成器</td><td>可重跑</td><td><code>test-cases/M1-D2-001/generate-cases.py</code></td></tr>
+      <tr><td>9.2.1 GitHub Issues</td><td>18 缺陷标签</td><td>仓库根目录 → Issues 标签 bug / P0 / P1 / P2</td></tr>
+      <tr><td>9.2.2 缺陷模板</td><td>bug-report.md</td><td><code>.github/ISSUE_TEMPLATE/bug-report.md</code>（待建）</td></tr>
+      <tr><td>9.2.3 缺陷统计</td><td>本报告 §5</td><td>见本报告第 5 章</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.2 §9.3 测试数据准备清单（7 步）</h3>
+  <p>附录里最实操的子节——把"环境从零到能跑"写成 7 步清单：</p>
+  <ol>
+    <li><strong>初始化数据库</strong>：<code>mysql -u root -p &lt; db/yami_shop.sql</code></li>
+    <li><strong>启动后端</strong>：<code>cd yami-shop-api &amp;&amp; mvn spring-boot:run</code></li>
+    <li><strong>启动前端</strong>：<code>cd front-end/mall4v &amp;&amp; pnpm dev</code></li>
+    <li><strong>创建测试账号</strong>：admin 后台 → 用户管理 → 新增（5 个状态矩阵）</li>
+    <li><strong>上架测试商品</strong>：admin 后台 → 商品管理 → 新增（≥10 个）</li>
+    <li><strong>配置优惠券</strong>：admin 后台 → 营销管理 → 优惠券</li>
+    <li><strong>准备 Mock 支付</strong>：启动 Mock 服务（端口见 <code>application.yml</code>）</li>
+  </ol>
+  <p><strong>要点</strong>：这 7 步的<strong>顺序不可调换</strong>——先有库才有服务，先有服务才有账号，先有账号才能跑用例。<strong>附录里写"先启动 Mock 再初始化数据库"的报告是错的</strong>。</p>
+
+  <h3>8.3 §9.4 测试执行时间表（占位）</h3>
+  <p>5 行时间表占位：D1 环境启动 / D2 用例执行 / D3 用例执行 / D3 缺陷收集 / D3 报告集成，每行 4 列（阶段 / 起止日期 / 执行人 / 关键里程碑）。v1.0 由 director 在数据回填时同步填日期。</p>
+
+  <h2 id="sec9">9. 报告评审 8 条 Checklist</h2>
+  <p>报告写完不是终点——PM/测试主管/开发的<strong>评审会</strong>才是终点。本节给出 8 条 Checklist，按 4 维度分组，<strong>任何一条不通过 = 报告返工</strong>。</p>
+
+  <h3>9.1 覆盖度维度（3 条）——是否该测的都测了</h3>
+  <table>
+    <thead><tr><th>#</th><th>Checklist</th><th>不通过的后果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>§1.3 In-scope 与 §4.2 模块分布一一对应</strong>——In-scope 列出的 6 模块，§4.2 必须都有数据行</td>
+        <td>PM 拿 In-scope 反问 → 报告失信</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>§2.1 方法列表与 §4.3 类型分布一一对应</strong>——每种方法在 §4.3 必须有对应的用例数</td>
+        <td>"方法论只列不用" → 显得空谈</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>§6.1 主链路 6 步每步都有用例</strong>——三流合一视角下，6 步任意一步无用例 = 主链路未完整覆盖</td>
+        <td>核心业务路径断裂 → 阻塞发布</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>9.2 数据真实性维度（2 条）——数字能不能信</h3>
+  <table>
+    <thead><tr><th>#</th><th>Checklist</th><th>不通过的后果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>4</td>
+        <td><strong>§4.5 + §5.6 数字自洽</strong>：通过率 + 失败率 + 阻塞率 + 跳过率 = 100%；已修复 + 修复中 + 未修复 = 总缺陷数 18</td>
+        <td>数字打架 → 报告整体失信，PM 直接打回</td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><strong>无 100% / 无完美数字</strong>——禁止出现"通过率 100%"或"修复率 100%"（150 条用例不可能全过，18 个缺陷不可能全修）</td>
+        <td>数据造假 → 测试工程师职业生涯红牌</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>9.3 风险闭环维度（2 条）——风险有没有结论</h3>
+  <table>
+    <thead><tr><th>#</th><th>Checklist</th><th>不通过的后果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>6</td>
+        <td><strong>§7.3 阻塞发布问题必须为空，或每条都有"是否在 §8.1 决策中被处理"的明确归属</strong></td>
+        <td>风险悬空 → PM 决策时无依据，回归测试不知从何开始</td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td><strong>§7.1 未覆盖范围每条都有"为什么不测"的来源（<code>CONTEXT.md §4</code> / M3 / i18n 留待）</strong></td>
+        <td>"为什么不测 X"反问无解 → 测试范围被反复质疑</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>9.4 结论可执行维度（1 条）——结论能不能照做</h3>
+  <table>
+    <thead><tr><th>#</th><th>Checklist</th><th>不通过的后果</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>8</td>
+        <td><strong>§8.1 结论二选一 + §8.2 下一步建议每条都可立即执行</strong>——三选一明确；§8.2 5 条建议每条对应明确动作</td>
+        <td>结论含糊 → PM 决策延迟 → 项目延期</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="interview">
+    <div class="who">Checklist 的使用方法</div>
+    把这 8 条写成 <code>report-review-checklist.md</code> 单独存档，每次报告评审会<strong>逐条打勾</strong>。8 条全过 = 报告可发布；任意一条不通过 = 报告作者当周返工。这与第 4 课"用例评审 10 条 Checklist"是同一类治理工具——把"什么是好"的判断<strong>外化为可打分的列表</strong>。
+  </div>
+
+  <h2 id="sec10">10. 课堂小测 + 收官提示</h2>
+  <p>本课是 M1-D3-001 报告交付的<strong>方法论收官</strong>——9 章骨架是结构，评审 Checklist 是质量门禁，三流合一视角是判断的灵魂。三件齐了，<strong>你就能把 150 用例 + 18 缺陷 + 4 个执行人 + 1 份占位报告，1 小时内拼成 v1.0</strong>。</p>
+  <p>下一步：把报告骨架 v0.1 → v1.0 的<strong>数据回填</strong>当作 M1-D3-001 的最后一步（不需要新写文档，只需替换占位符）。环境跑通（M1-D1-001 启动后）由 director 一次性集成。</p>
+
+  <h3>10.1 本课 win 验证</h3>
+  <p>你能用 5 分钟画出本课第 3 节的 9 章骨架 mermaid 图，并说出每章对应 <code>functional-test-report.md</code> 的哪些子节——这就是 Mission 锚点"让用户能独立产出 1 份 5 章精简版测试报告"。</p>
+  <p>本课 win 产物：<code>learning-records/0008-win-mini-report.md</code>（1500-2500 字 5 章精简版测试报告）。</p>
+
+  <h3>10.2 M1-D1-001 启动节奏提醒</h3>
+  <p><strong>报告骨架先行的最大风险 = 永远停在 v0.1 骨架版</strong>。一旦骨架落地，要立刻进入 M1-D1-001 环境启动 + Worker A 用例执行 + Worker B 缺陷实际复现三线并行。环境跑通后 1 周内必出 v1.0，否则 v0.1 会被废弃。</p>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（9 章骨架的取舍 / 三流合一 6 步主链路的边界 / §6.6 关键发现怎么写 / §8.1 发布判定的口径 / 评审 8 条 Checklist 的争议项）抛给你的 AI 教师追问——单点困惑往往牵出整条报告治理链，问得越具体，回答越能反哺你的 M1-D3-001 实际产出。
+  </div>
+
+  <h2>课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>mall4j 功能测试报告骨架的章节结构（v0.1）共有几章？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 6 章 三段式精简（概述+用例+结论）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 9 章 全要素版（设计+数据+判断+决策+索引）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 12 章 9 章+性能/兼容/自动化 三个扩展</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) 15 章 全模块化（功能+接口+UI+性能+安全+CI）</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>三流合一视角下，主链路（资金/信息/物流同步）共有几步？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 5 步 登录→加购→下单→支付→评价（缺收货）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 6 步 登录→加购→下单→支付→收货→评价</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 8 步 6 步主链+售后+退款（两个独立步骤）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 10 步 6 步主链+注册+实名+风控（三个前置）</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>本课给出的报告评审 Checklist 一共有几条？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 5 条 覆盖/真实/风险/结论/附录 各 1 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 8 条 覆盖3 + 真实2 + 风险2 + 结论1</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 10 条 覆盖/真实/风险/结论/附录各 2 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 15 条 每章单独打分 + 横向交叉检查</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0007-bug-library-18-predicted.html">第 7 课 18 条预测缺陷——AGPLv3 模式下的源码逆向工程</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../../doc/2-环境搭建/1-30分钟启动路线.md">立即进入 M1-D1-001 环境启动（30 分钟路线图）</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0008-report-skeleton-cheatsheet.html">9 章骨架速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0008-report-skeleton-cheatsheet.html">9 章骨架速查卡（reference/0008-report-skeleton-cheatsheet.html）</a></li>
+      <li><a href="../../test-cases/M1-D3-001/functional-test-report.md">functional-test-report.md（M1-D3-001 v0.1 骨架原文）</a></li>
+      <li><a href="../../doc/2-环境搭建/1-30分钟启动路线.md">doc/2-环境搭建/1-30分钟启动路线.md</a></li>
+    </ul>
+    <div>课程系列收官——8 课业务理解 + 用例设计 + 缺陷库 + 报告骨架四件套全部交付，下一步进入 M1-D1-001 环境启动 + M1-D3-001 v1.0 数据回填。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=B(1), Q3=B(1) ===
+  var correctMap = { q1: '1', q2: '1', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec3', text: '回到第 3 节：再读"9 章骨架总览"的 mermaid 章节树' },
+    q2: { href: '#sec6', text: '回到第 6 节：再读"三流合一视角 6 步主链路"' },
+    q3: { href: '#sec9', text: '回到第 9 节：再读"报告评审 8 条 Checklist"' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

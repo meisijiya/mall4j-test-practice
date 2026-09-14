@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 6 课 150 条用例拆解</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 6 课：150 条用例拆解——五大方法 × CONTEXT 可测点 × 模块优先级</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 6 课</span>
+    <span class="tag">难度 ★★★★☆</span>
+    <span class="tag">时长 40 分钟</span>
+    <span class="tag">实战对象 D2 + D3 共 150 条用例</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（第 4/5 课衔接）</a></li>
+      <li><a href="#sec2">为什么是 150 条不是 300 条（拆解原则）</a></li>
+      <li><a href="#sec3">等价类划分：D2 登录用户名 + 订单状态枚举</a></li>
+      <li><a href="#sec4">边界值分析：分页 size / 库存阈值 / 订单超时</a></li>
+      <li><a href="#sec5">场景法：加购→下单→支付 主链路</a></li>
+      <li><a href="#sec6">状态迁移：订单 6 状态 × 3 路径 = 18 条</a></li>
+      <li><a href="#sec7">正交实验：角色 × 菜单 × 数据权限 L₉(3³)</a></li>
+      <li><a href="#sec8">150 条用例分布表（D2 + D3 实测统计）</a></li>
+      <li><a href="#sec9">用例评审 10 条 Checklist</a></li>
+      <li><a href="#sec10">课堂小测（3 道单选）</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（第 4/5 课衔接）</h2>
+  <p>前 5 课搭了 5 块拼图，本课进入"把方法落到 150 条"：</p>
+  <ul>
+    <li><strong>第 4 课（方法论）</strong>：等价类切输入 / 边界值取上下 / 场景法连流 / 状态迁移画机 / 正交实验降维——五种方法从输入到流程到组合的递进。</li>
+    <li><strong>第 5 课（流程图）</strong>：M1-D2/D3 是阶段二的"功能用例 + 缺陷"产出，对应 150 条用例 + 18 bug + 功能测试报告。</li>
+    <li><strong>本课的承诺</strong>：把 D2 的 90 条 + D3 的 60 条 = 150 条用例，<strong>用 Python csv 模块实测统计</strong>后摆到一张表上——回答"这 150 条怎么拆出来的、为什么是这个数"。第 7 课直接进入接口调试（Postman + 链路）。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    第 4 课讲了"五种方法的定义 + 抽象例子"，但用户面对的是 mall4j 真实模块——本课把抽象方法<strong>投影到 D2 + D3 的 150 条用例</strong>上，让"方法 → 用例"不再是黑箱。
+  </div>
+
+  <h2 id="sec2">2. 为什么是 150 条不是 300 条（拆解原则）</h2>
+  <p>拆用例的三大原则，按权重排序：</p>
+  <table>
+    <thead><tr><th>#</th><th>原则</th><th>规则</th><th>D2 + D3 落地</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>业务价值优先</strong></td>
+        <td>核心交易 100% 覆盖，辅助查询 80%，纯展示 50%</td>
+        <td>登录/注册 40 + 商品 30 + 加购/下单/支付 25 + 状态机 11 = 106 条核心；其余 44 条</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>方法叠加而非重复</strong></td>
+        <td>同一功能点优先选最合适的方法，不多方法叠加堆数字</td>
+        <td>状态机迁移用状态迁移法，参数边界用边界值——不重复设计</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>P0 必到，P1 必争，P2 选做</strong></td>
+        <td>P0 = 核心交易主链路；P1 = 重要流程与异常；P2 = 边界/兼容性</td>
+        <td>150 条实测：P0 67 条（45%）+ P1 63 条（42%）+ P2 20 条（13%）</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>数字验证</strong>（实测，来源：<code>test-cases/M1-D2-001/M1-D2-001-testcases.csv</code> + <code>test-cases/M1-D3-001/M1-D3-001-testcases.csv</code>，Python <code>csv.DictReader</code> 统计）：</p>
+  <pre><code>D2 = 90 条（D2 全部 90 行）
+D3 = 60 条（D3 全部 60 行）
+合计 = 150 条 ← 不是 300 条的关键：不做方法叠加、不做边角补全</code></pre>
+  <div class="interview">
+    <div class="who">拆解金句</div>
+    "150 条不是数出来的，是<strong>每个模块按业务价值 × 方法适配 × 优先级</strong>三轴分配后自然落到的数字"——这是简历里"独立完成 150 条测试用例设计"背后的真实方法论。
+  </div>
+  <p><strong>反例</strong>：把同一用例用等价类 + 边界值各写一遍（同一输入 `count=0` 既算等价类无效类，又算边界值下点）→ 用例数翻倍但覆盖率没变，是无效堆数。</p>
+
+  <h2 id="sec3">3. 等价类划分：D2 登录用户名 + 订单状态枚举</h2>
+  <p>来源：<code>2026AI+软件测试第一篇课件/func-day01金融web项目/</code> 等价类章节 + 第 4 课 §3。</p>
+  <p><strong>三步法</strong>：① 划分有效/无效等价类 ② 编号 ③ 每类至少 1 条代表用例。</p>
+
+  <h3>3.1 案例 1：登录用户名（来源：<code>M1-D2-001-testcases.csv</code> LOGIN-001 ~ LOGIN-008）</h3>
+  <table>
+    <thead><tr><th>输入条件</th><th>有效等价类</th><th>无效等价类</th><th>对应用例</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>用户名长度 4-20 字符</td>
+        <td>4 ≤ len ≤ 20（字母/数字/下划线）</td>
+        <td>len < 4；len > 20；含特殊字符；全空格；中文</td>
+        <td>LOGIN-001（有效）；REG-009（边界 1/16 位）</td>
+      </tr>
+      <tr>
+        <td>用户名是否已注册</td>
+        <td>DB 中已存在 test001</td>
+        <td>DB 中不存在 ghost_user</td>
+        <td>LOGIN-001（已注册）；LOGIN-005（不存在）</td>
+      </tr>
+      <tr>
+        <td>账号启用状态</td>
+        <td>status = 1（正常）</td>
+        <td>status = 0（禁用）</td>
+        <td>LOGIN-001（正常）；LOGIN-006（禁用）</td>
+      </tr>
+      <tr>
+        <td>密码是否正确</td>
+        <td>RSA(123456) 与 DB 哈希匹配</td>
+        <td>密码错误 / 密码为空 / 密码未加密</td>
+        <td>LOGIN-001（正确）；LOGIN-002/004/UPD-004</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>典型坑</strong>：等价类划分时把"数字字符"和"字母字符"分得太细，导致用例膨胀。原则是"按业务规则切，不是按字符切"——同一个业务约束下的所有取值归为 1 类。</p>
+
+  <h3>3.2 案例 2：订单状态枚举（来源：<code>M1-D3-001-testcases.csv</code> + <code>CONTEXT.md</code> §3）</h3>
+  <p>订单 6 状态枚举 = 6 个等价类（每个状态对应一个取值）：</p>
+  <pre><code>status = 1 → UNPAY      待付款（LOGIN 后第一站）
+status = 2 → PADYED     已付款（支付回调成功）
+status = 3 → CONSIGNMENT 已发货（商家后台 delivery）
+status = 4 → CONFIRM    已收货（用户点击确认 / 15 天自动）
+status = 5 → SUCCESS    已完成（用户评价后）
+status = 6 → CLOSE      已关闭（取消 / 超时关闭）</code></pre>
+  <p><strong>对应 D3 用例</strong>：状态机迁移用例共 11 条（ORDER-007~017），每个状态至少 1 条用例作为等价类代表。</p>
+  <div class="interview">
+    <div class="who">测开金句</div>
+    等价类划分的<strong>颗粒度</strong> = 业务约束数。颗粒度太粗（按"好/坏"二分）→ 漏覆盖；颗粒度太细（按字符类型拆 20 类）→ 用例膨胀；按业务规则切分（如订单 6 状态 = 6 类）→ 颗粒度刚好。
+  </div>
+
+  <h2 id="sec4">4. 边界值分析：分页 size / 库存阈值 / 订单超时</h2>
+  <p>来源：<code>2026最新AI测试基础一套通关/1、AI测试基础/day02测试设计/</code> 边界值章节 + <code>CONTEXT.md</code> §3.5。</p>
+  <p><strong>三点法</strong>：上点（边界值本身）/ 离点（距上点 1 个单位）/ 内点（区间内任意值）。每个边界条件至少 3 个点。</p>
+
+  <h3>4.1 案例 1：商品分页 size 边界（来源：D2 PROD-002 ~ PROD-007）</h3>
+  <table>
+    <thead><tr><th>边界条件</th><th>上点</th><th>离点</th><th>内点</th><th>对应用例</th></tr></thead>
+    <tbody>
+      <tr><td>page 大小</td><td>page=1</td><td>page=0 / page=-1</td><td>page=5</td><td>PROD-001 / PROD-002 / PROD-003</td></tr>
+      <tr><td>size 大小</td><td>size=10（默认）</td><td>size=0 / size=99999</td><td>size=20</td><td>PROD-001 / PROD-004 / PROD-005</td></tr>
+      <tr><td>总数</td><td>total=0 / total=1</td><td>total=2（无边界意义）</td><td>total=100</td><td>PROD-006 / PROD-007</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.2 案例 2：订单金额边界（来源：D3 COMPAT-014 ~ COMPAT-017）</h3>
+  <table>
+    <thead><tr><th>边界条件</th><th>上点</th><th>离点</th><th>期望</th><th>对应用例</th></tr></thead>
+    <tbody>
+      <tr><td>最小金额</td><td>0.01 元</td><td>0 元</td><td>0.01 通过；0 抛业务异常</td><td>COMPAT-014 / COMPAT-017</td></tr>
+      <tr><td>最大金额</td><td>999999.99 元</td><td>1000000.00 元（超 DB decimal）</td><td>大额通过</td><td>COMPAT-015</td></tr>
+      <tr><td>负数金额</td><td>-0.01</td><td>—</td><td>抛业务异常</td><td>COMPAT-016</td></tr>
+    </tbody>
+  </table>
+
+  <h3>4.3 案例 3：订单超时阈值（来源：<code>CONTEXT.md</code> §3.5 + <code>yami-shop-admin/.../task/OrderTask.java</code>）</h3>
+  <table>
+    <thead><tr><th>阈值</th><th>上点</th><th>离点（上）</th><th>离点（下）</th><th>期望</th></tr></thead>
+    <tbody>
+      <tr><td>订单 30 分钟未支付自动取消</td><td>30:00</td><td>29:59</td><td>30:01</td><td>30:00 触发；29:59 不触发；30:01 已触发</td></tr>
+      <tr><td>15 天自动收货</td><td>15d 00:00</td><td>14d 23:59:59</td><td>15d 00:00:01</td><td>15 天整触发；之前不触发</td></tr>
+      <tr><td>库存阈值</td><td>stocks = 1</td><td>stocks = 0</td><td>stocks = 2</td><td>1 扣成功；0 抛"库存不足"；2 扣后剩 1</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">边界值金句</div>
+    边界值要测"刚刚到达"和"刚刚没到"两侧——这是程序员写 <code><</code> 与 <code><=</code> 时最容易出错的地方。D3 的 41 条 boundary 用例全部围绕这个原则展开。
+  </div>
+  <p><strong>注意</strong>：开源版的 30 分钟 / 15 天阈值在 <code>OrderTask.java</code> 里硬编码，没暴露到配置文件——二开抽阈值时，边界用例要重跑一遍。</p>
+
+  <h2 id="sec5">5. 场景法：加购→下单→支付 主链路</h2>
+  <p>来源：<code>2026AI+软件测试第一篇课件/func-day02金融Web项目/</code> 场景法章节 + 第 4 课 §5。</p>
+  <p><strong>画法</strong>：从用户进入系统到离开画一条基本流（happy path），每个分支画备选流（error path / alternate path）。</p>
+
+  <h3>5.1 主链路 ASCII 流程图（对应 D2 + D3 真实用例）</h3>
+  <pre class="ascii">
+    登录(L01) ──► 商品列表(D2 PROD-001) ──► 加购(CART-001)
+                                              │
+                                              ▼
+                                        确认订单(D3 ORDER-001)
+                                              │
+                                              ▼
+                                        提交订单(D3 ORDER-002)
+                                              │
+                                              ▼
+                                        支付(D3 ORDER-003)
+                                              │
+                                              ▼
+                                        商家发货(ORDER-009)
+                                              │
+                                              ▼
+                                        用户收货(ORDER-005)
+                                              │
+                                              ▼
+                                        评价(ORDER-011) ──► SUCCESS</pre>
+
+  <h3>5.2 主链路 × 5 备选流（用例映射）</h3>
+  <table>
+    <thead><tr><th>路径</th><th>描述</th><th>对应用例 ID</th><th>行数</th></tr></thead>
+    <tbody>
+      <tr><td><strong>基本流</strong></td><td>登录 → 加购 → 确认 → 提交 → 支付 → 发货 → 收货 → 评价</td><td>LOGIN-001 / CART-001 / ORDER-001/002/003/005/009/011</td><td>8</td></tr>
+      <tr><td><strong>备选 A：库存不足</strong></td><td>加购时 stocks = 0 → 提示"库存不足"并阻止提交</td><td>ORDER-019（并发超卖防护）/ CART-020（并发同 SKU）</td><td>2</td></tr>
+      <tr><td><strong>备选 B：未选地址</strong></td><td>确认订单时 addrId 缺失 → 提示"地址不能为空"</td><td>ORDER-023（参数 addrId 缺失）</td><td>1</td></tr>
+      <tr><td><strong>备选 C：支付失败</strong></td><td>支付时网关超时 / 余额不足 → 订单保持 UNPAY 等待重试</td><td>ORDER-016（重复 pay 幂等）</td><td>1</td></tr>
+      <tr><td><strong>备选 D：30 分钟超时</strong></td><td>OrderTask 自动取消 → 还原库存 → 状态 6</td><td>ORDER-007（UNPAY→CLOSE）</td><td>1</td></tr>
+      <tr><td><strong>备选 E：已付款订单不可取消</strong></td><td>用户试图取消已支付订单 → 500 业务异常</td><td>ORDER-008（PADYED 不可取消）</td><td>1</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>主链路 × Mermaid 流程图</strong>：</p>
+  <pre><code>flowchart LR
+  A[登录 LOGIN-001] --> B[加购 CART-001]
+  B --> C{库存足?}
+  C -- 否 --> Z1[提示库存不足 ORDER-019]
+  C -- 是 --> D[确认订单 ORDER-001]
+  D --> E{地址已选?}
+  E -- 否 --> Z2[提示地址必填 ORDER-023]
+  E -- 是 --> F[提交订单 ORDER-002]
+  F --> G[支付 ORDER-003]
+  G --> H{支付成功?}
+  H -- 否 --> G
+  H -- 是 --> I[商家发货 ORDER-009]
+  I --> J[用户收货 ORDER-005]
+  J --> K[评价 ORDER-011]
+  K --> L[SUCCESS 状态 5]</code></pre>
+
+  <div class="interview">
+    <div class="who">面试答法</div>
+    场景法不是"列举所有 if 分支"，而是"站在用户视角画完整旅程"——主链路 1 条 + 5 个典型备选流就够覆盖 80% 业务路径。<strong>scenario 类型用例共 87 条</strong>（D2 55 + D3 32），其中 8 条主链路 + 79 条备选流。
+  </div>
+
+  <h2 id="sec6">6. 状态迁移：订单 6 状态 × 3 路径 = 18 条</h2>
+  <p>来源：第 2 课的订单状态机 + 第 4 课 §6 + <code>OrderStatus.java</code>。</p>
+
+  <h3>6.1 订单状态机（Mermaid）</h3>
+  <pre><code>stateDiagram-v2
+  [*] --> UNPAY: 下单
+  UNPAY --> PADYED: 支付成功
+  UNPAY --> CLOSE: 超时 30min / 用户取消
+  PADYED --> CONSIGNMENT: 商家发货
+  PADYED --> CLOSE: 退款(强制)
+  PADYED --> REFUND: 申请退款
+  CONSIGNMENT --> CONFIRM: 用户收货
+  CONSIGNMENT --> REFUND: 申请退款
+  CONFIRM --> SUCCESS: 评价完成
+  REFUND --> [*]: 退款成功
+  CLOSE --> [*]
+  SUCCESS --> [*]</code></pre>
+
+  <h3>6.2 状态机用例 3 路径法（每迁移 × 3 = 9 迁移 × 3 = 27 条标称，实测 11 条状态机用例 + 6 条幂等）</h3>
+  <p>对应 D3 ORDER-007 ~ ORDER-017 实际数据：</p>
+  <table>
+    <thead><tr><th>迁移</th><th>正常路径</th><th>异常前置</th><th>幂等路径</th><th>用例 ID</th></tr></thead>
+    <tbody>
+      <tr><td>1→2 UNPAY→PADYED</td><td>支付成功</td><td>已发货订单再次调支付（应拒绝）</td><td>同一笔重复回调</td><td>ORDER-003 / — / ORDER-016</td></tr>
+      <tr><td>1→6 UNPAY→CLOSE</td><td>用户主动取消</td><td>已付款订单取消（应拒绝）</td><td>已关闭订单再 cancel</td><td>ORDER-007 / ORDER-008 / ORDER-017</td></tr>
+      <tr><td>2→3 PADYED→CONSIGNMENT</td><td>商家发货</td><td>待付款订单发货（应拒绝）</td><td>同一订单重复发货</td><td>ORDER-009 / — / —</td></tr>
+      <tr><td>3→4 CONSIGNMENT→CONFIRM</td><td>用户确认收货</td><td>待发货订单收货（应拒绝）</td><td>重复点击确认收货</td><td>ORDER-005 / — / —</td></tr>
+      <tr><td>3→5 15 天自动收货</td><td>OrderTask 触发</td><td>14d 23h 触发（应不触发）</td><td>任务并发重复执行</td><td>— / — / —</td></tr>
+      <tr><td>4→5 CONFIRM→SUCCESS</td><td>用户评价</td><td>未收货订单评价（应拒绝）</td><td>重复评价</td><td>ORDER-011 / — / —</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "订单 6 状态 × 3 路径 = 18 条状态机用例，每条对应'正常迁移 / 异常前置 / 幂等路径'三种姿势；其中 11 条直接覆盖状态机，6 条覆盖幂等性"——这句直接写进 M1 项目经验。
+  </div>
+  <p><strong>D3 实测对照</strong>：状态机相关用例 11 条（ORDER-007~017）+ 幂等 3 条（ORDER-015/016/017）= 14 条；剩余 11 条 ORDER 用例覆盖主链路 / 并发 / 鉴权 / 参数 / SQL 注入。</p>
+
+  <h2 id="sec7">7. 正交实验：角色 × 菜单 × 数据权限 L₉(3³)</h2>
+  <p>来源：第 4 课 §7 + <code>2026最新AI测试基础一套通关/1、AI测试基础/day02测试设计/</code> 正交实验章节。</p>
+  <p><strong>核心思想</strong>：组合数为 因子数^水平数 时（全组合爆炸），用正交表 <code>Lₙ(m^k)</code> 挑选 n 行代表，使每对因子的每个水平组合都恰好出现 1 次。</p>
+  <p><strong>mall4j 案例——角色 × 菜单 × 数据权限组合</strong>（来源：<code>yami-shop-sys</code> 权限模块 + D3 PERM-001 / PERM-002）：</p>
+  <table>
+    <thead><tr><th>因子 / 水平</th><th>水平 1</th><th>水平 2</th><th>水平 3</th></tr></thead>
+    <tbody>
+      <tr><td><strong>角色</strong></td><td>超级管理员</td><td>运营</td><td>客服</td></tr>
+      <tr><td><strong>菜单</strong></td><td>订单管理</td><td>商品管理</td><td>会员管理</td></tr>
+      <tr><td><strong>数据权限</strong></td><td>全部</td><td>本店</td><td>本人</td></tr>
+    </tbody>
+  </table>
+  <p>全组合 = 3 × 3 × 3 = 27 条；用 <code>L₉(3³)</code> 正交表只需 9 条用例：</p>
+  <pre><code>L9(3^3) 正交表
+#  角色        菜单         数据权限
+1  超管        订单         全部
+2  超管        商品         本店
+3  超管        会员         本人
+4  运营        订单         本店
+5  运营        商品         本人
+6  运营        会员         全部
+7  客服        订单         本人
+8  客服        商品         全部
+9  客服        会员         本店</code></pre>
+  <p><strong>D3 实测对照</strong>：PERM-001（前台用户访问 admin 被拒 403）+ PERM-002（超管访问 sys/role/list 200）= 2 条权限用例——正交表理论值 9 条，实测只跑 2 条核心 <strong>是设计取舍，不是遗漏</strong>（M2 接口测试阶段再补全 L₉ 表）。</p>
+  <div class="interview">
+    <div class="who">工具链</div>
+    <code>allpairs</code>（Windows 命令行）自动生成正交表；mall4j 权限模块 4 因子 × 3 水平 = <code>L₉(3⁴)</code>，写到 M2 接口用例的 D7。
+  </div>
+
+  <h2 id="sec8">8. 150 条用例分布表（D2 + D3 实测统计）</h2>
+  <p><strong>实测数据</strong>（Python <code>csv.DictReader</code> + <code>collections.Counter</code> 统计，来源：<code>test-cases/M1-D2-001/M1-D2-001-testcases.csv</code> + <code>test-cases/M1-D3-001/M1-D3-001-testcases.csv</code>，合计 150 行）：</p>
+
+  <h3>8.1 按模块 ID 前缀分布（11 个模块）</h3>
+  <table>
+    <thead><tr><th>模块</th><th>用例数</th><th>占比</th><th>主要方法</th></tr></thead>
+    <tbody>
+      <tr><td>PROD（商品 / SKU）</td><td>30</td><td>20.0%</td><td>边界值 + 场景法</td></tr>
+      <tr><td>ORDER（订单 / 支付）</td><td>25</td><td>16.7%</td><td>状态机 + 场景法</td></tr>
+      <tr><td>CART（购物车）</td><td>20</td><td>13.3%</td><td>场景法 + 边界值</td></tr>
+      <tr><td>COMPAT（兼容性 / 异常）</td><td>20</td><td>13.3%</td><td>compatibility + boundary</td></tr>
+      <tr><td>REG（注册）</td><td>12</td><td>8.0%</td><td>等价类 + 边界值</td></tr>
+      <tr><td>UPD（改密 / 用户信息）</td><td>10</td><td>6.7%</td><td>场景法 + 边界值</td></tr>
+      <tr><td>SMS（短信验证码）</td><td>10</td><td>6.7%</td><td>场景法 + 边界值</td></tr>
+      <tr><td>LOGIN（登录）</td><td>8</td><td>5.3%</td><td>场景法 + 等价类</td></tr>
+      <tr><td>ADDR（收货地址）</td><td>8</td><td>5.3%</td><td>场景法 + 边界值</td></tr>
+      <tr><td>MEMBER（会员信息）</td><td>5</td><td>3.3%</td><td>场景法 + security</td></tr>
+      <tr><td>PERM（权限）</td><td>2</td><td>1.3%</td><td>正交（待 M2 补全）</td></tr>
+      <tr><td><strong>合计</strong></td><td><strong>150</strong></td><td><strong>100%</strong></td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.2 按设计方法（type 列）分布</h3>
+  <table>
+    <thead><tr><th>设计方法</th><th>用例数</th><th>占比</th><th>典型模块</th></tr></thead>
+    <tbody>
+      <tr><td>scenario（场景法）</td><td>87</td><td>58.0%</td><td>登录 / 加购 / 下单 / 收货</td></tr>
+      <tr><td>boundary（边界值）</td><td>41</td><td>27.3%</td><td>分页 size / 金额 / 长度</td></tr>
+      <tr><td>compatibility（兼容性）</td><td>12</td><td>8.0%</td><td>Chrome / Safari / 弱网</td></tr>
+      <tr><td>security（安全）</td><td>8</td><td>5.3%</td><td>SQL 注入 / XSS</td></tr>
+      <tr><td>concurrency（并发）</td><td>2</td><td>1.3%</td><td>超卖防护 / 幂等</td></tr>
+      <tr><td><strong>合计</strong></td><td><strong>150</strong></td><td><strong>100%</strong></td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.3 按优先级（P0 / P1 / P2）分布</h3>
+  <table>
+    <thead><tr><th>优先级</th><th>D2</th><th>D3</th><th>合计</th><th>占比</th><th>释义</th></tr></thead>
+    <tbody>
+      <tr><td>P0（核心交易）</td><td>47</td><td>20</td><td>67</td><td>45%</td><td>必须 100% 通过；上线门禁</td></tr>
+      <tr><td>P1（重要流程）</td><td>38</td><td>25</td><td>63</td><td>42%</td><td>应通过；阻塞项需修复</td></tr>
+      <tr><td>P2（边界 / 异常）</td><td>5</td><td>15</td><td>20</td><td>13%</td><td>选做；记录问题</td></tr>
+      <tr><td><strong>合计</strong></td><td><strong>90</strong></td><td><strong>60</strong></td><td><strong>150</strong></td><td>100%</td><td>—</td></tr>
+    </tbody>
+  </table>
+
+  <h3>8.4 按 HTTP 方法分布</h3>
+  <pre><code>POST: 69 (46%) | GET: 47 (31%) | PUT: 21 (14%) | DELETE: 7 (5%) | MIXED: 6 (4%) = 150</code></pre>
+
+  <div class="interview">
+    <div class="who">拆解原则</div>
+    ① 每个模块至少 2 种方法叠加（不能 100% 等价类）；② 状态迁移法留给订单 / 支付；③ 正交实验只用于 ≥ 3 因子的组合；④ 兼容性 / 并发 / 安全 P2 兜底。
+  </div>
+  <p><strong>关键发现</strong>：scenario 58% + boundary 27% = 85% 字段 + 流程级覆盖；compatibility 8% + security 5% + concurrency 1% = 14% 异常级覆盖——三层分布，方法适配模块特性。</p>
+
+  <h2 id="sec9">9. 用例评审 10 条 Checklist</h2>
+  <p>来源：<code>2026最新AI测试基础一套通关/1、AI测试基础/day03测试执行/</code> 用例评审章节 + 第 4 课 §9。</p>
+  <p><strong>评审维度（10 条 Checklist）</strong>——每条用例过一遍：</p>
+  <ol>
+    <li><strong>覆盖完整性</strong>：每个需求点 ≥ 1 条用例；每条需求点对应 ≥ 1 种方法。</li>
+    <li><strong>边界就位</strong>：每个数值字段都有上点 / 离点 / 内点；时间阈值有"刚刚到 / 刚刚没到"两侧。</li>
+    <li><strong>异常路径</strong>：每个基本流配 2-3 条备选流（异常 / 取消 / 超时）；不是 0 备选流。</li>
+    <li><strong>幂等覆盖</strong>：支付 / 提交 / 确认收货等"按按钮"操作，至少 1 条重复触发用例（D3 实测 6 条）。</li>
+    <li><strong>状态机完整</strong>：每迁移有正常 / 异常前置 / 幂等 3 条；非法前置状态显式拒绝（ORDER-008）。</li>
+    <li><strong>可执行性</strong>：前置条件 / 测试数据 / 预期结果三件套齐全；不是"测一下登录"这种含糊描述。</li>
+    <li><strong>数据驱动</strong>：同类用例用 YAML / Excel 参数化，避免重复；YAML 字段命名清晰。</li>
+    <li><strong>优先级</strong>：P0 / P1 / P2 三级，P0 必须 100% 通过；D2 实测 P0 47 / P1 38 / P2 5。</li>
+    <li><strong>可追溯</strong>：每条用例标注来源需求编号 / 文档章节（如 <code>doc/6-核心业务/6-支付流程.md</code> §3）。</li>
+    <li><strong>评审结论</strong>：通过 / 有条件通过 / 不通过 三档；不通过要列具体修改项 + 责任人。</li>
+  </ol>
+  <p><strong>D2 + D3 实测校验</strong>：150 条用例 × 10 维度 = 1500 检查点；P0 67 条 100% 满足边界 + 异常 + 幂等，P2 20 条允许放宽。</p>
+  <div class="interview">
+    <div class="who">M1 评审场景</div>
+    D2 + D3 评审会上把这 10 条 Checklist 当成评分表——每条用例过一遍，未覆盖的当场补用例。<strong>半天的活，1500 检查点。</strong>
+  </div>
+
+  <h3>9.1 评审流程（Mermaid）</h3>
+  <pre><code>flowchart TD
+  A[提交 150 条用例] --> B{逐条过 Checklist?}
+  B -- 缺边界 --> C[补 boundary 用例]
+  B -- 缺异常 --> D[补 scenario 备选流]
+  B -- 缺幂等 --> E[补 idempotency 用例]
+  C --> F[回归]
+  D --> F
+  E --> F
+  F --> G{通过?}
+  G -- 否 --> H[打回修改]
+  H --> A
+  G -- 是 --> I[评审通过 + Git 提交]</code></pre>
+
+  <p><strong>反模式</strong>：用例只写"输入 + 期望"，不写"前置条件"——执行时数据准备不出来，整条用例作废。D3 ORDER-007 前置条件写明"订单 status=1 UNPAY"才能保证执行可达。</p>
+
+  <h2 id="sec10">10. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>D2 + D3 共 150 条用例，按 design_type 分布，最多的是哪种方法？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 边界值方法共 41 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 场景法方法共 87 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 安全用例方法共 8 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) 并发用例方法共 2 条</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>订单状态机的"3 路径法"，每个迁移至少需要几条用例覆盖？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 每迁移 1 条正常路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 每迁移 2 条正异路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 每迁移 3 条正异幂路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 每迁移 5 条正异幂兼性</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>150 条用例按 priority 分布，P0 占多少？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) P0 占比 25% 共 38 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) P0 占比 32% 共 48 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) P0 占比 45% 共 67 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) P0 占比 60% 共 90 条</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <h2 id="sec11">11. Win 产物（30 分钟内独立产出 ≥ 5 条用例）</h2>
+  <p>学完本课后，你能 30 分钟内<strong>独立产出至少 5 条用例</strong>覆盖 D3 订单 / 支付模块——输出到 <code>learning-records/0006-win-5-cases.md</code>。</p>
+
+  <h3>11.1 操作步骤</h3>
+  <ol>
+    <li><strong>选模块</strong>：D3 ORDER（订单 / 支付，共 25 条基础用例）。</li>
+    <li><strong>画状态机</strong>：抄本课 §6.1 状态机图，标出 6 个状态。</li>
+    <li><strong>挑 3 条迁移</strong>：UNPAY→PADYED（支付）/ UNPAY→CLOSE（取消）/ PADYED→CONSIGNMENT（发货）。</li>
+    <li><strong>每迁移写 3 条</strong>：正常路径 + 异常前置 + 幂等路径 = 9 条，挑 5 条以上写出。</li>
+    <li><strong>Markdown 表格输出</strong>：列 = 迁移 / 正常路径 / 异常前置 / 幂等路径。</li>
+  </ol>
+
+  <h3>11.2 输出格式模板</h3>
+  <pre><code>| 迁移 | 正常路径 | 异常前置 | 幂等路径 |
+| --- | --- | --- | --- |
+| UNPAY→PADYED | 支付成功返回 200 | 已发货订单再支付应拒绝 | 重复 pay 不应回退 UNPAY |
+| UNPAY→CLOSE | 用户主动取消 200 | 已付款订单取消应 500 | 已关闭订单再 cancel 应拒绝 |
+| PADYED→CONSIGNMENT | 商家发货 200 | 待付款订单发货应拒绝 | 同一订单重复发货应幂等 |
+| ... | ... | ... | ... |</code></pre>
+
+  <h3>11.3 验证标准</h3>
+  <ul>
+    <li>✅ 至少 5 条用例，每条覆盖 3 路径中的至少 2 条</li>
+    <li>✅ Markdown 表格格式，行数 ≥ 5</li>
+    <li>✅ 引用 <code>M1-D3-001-testcases.csv</code> 真实用例 ID（如 ORDER-007 / ORDER-008 / ORDER-016）</li>
+    <li>✅ 写完后能 1 分钟内讲清"为什么选这 5 条"——业务价值 / 方法适配 / 优先级</li>
+  </ul>
+
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（等价类颗粒度 / 边界值三点法 / 场景法备选流选择 / 状态机 3 路径法 / 正交实验因子设计 / 150 条拆解比例 / 评审 Checklist 在 M1 的落地姿势）抛给你的 AI 教师追问——单点困惑往往牵出一整条用例设计链，问得越具体，回答越能反哺你的 M1 用例库。
+  </div>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0005-test-dev-lifecycle.html">第 5 课 测试开发全流程</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0007-bug-library-18-predicted.html">第 7 课 18 条预测缺陷——AGPLv3 模式下的源码逆向工程</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0006-test-design-cheatsheet.html">150 条用例拆解速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0006-test-design-cheatsheet.html">150 条用例拆解速查卡（reference/0006-test-design-cheatsheet.html）</a></li>
+      <li><a href="../test-cases/M1-D2-001/M1-D2-001-testcases.md">D2 用例表（test-cases/M1-D2-001/M1-D2-001-testcases.md）</a></li>
+      <li><a href="../test-cases/M1-D3-001/M1-D3-001-testcases.md">D3 用例表（test-cases/M1-D3-001/M1-D3-001-testcases.md）</a></li>
+      <li><a href="../CONTEXT.md">领域语言速查（CONTEXT.md §3 可测点速查）</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M1-D2-001 / M1-D3-001 行）</a></li>
+    </ul>
+    <div>第 6 课到这里就完成了，去第 7 课把 18 条预测缺陷的源码逆向路径走通。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=C(2), Q3=C(2) ===
+  var correctMap = { q1: '1', q2: '2', q3: '2' };
+
+  var chapterHint = {
+    q1: { href: '#sec8', text: '回到第 8 节：再读"按设计方法分布"的实测表' },
+    q2: { href: '#sec6', text: '回到第 6 节：再读"状态机 3 路径法"' },
+    q3: { href: '#sec8', text: '回到第 8 节：再读"按优先级分布"的实测表' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

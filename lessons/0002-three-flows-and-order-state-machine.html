@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 2 课 三流合一与订单状态机</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 2 课：三流合一（资金 / 信息 / 物流）+ 订单状态机</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 2 课</span>
+    <span class="tag">难度 ★★☆☆☆</span>
+    <span class="tag">时长 30 分钟</span>
+    <span class="tag">实战对象 订单状态机</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（第 1 课的关键点）</a></li>
+      <li><a href="#sec2">三流合一定义（资金 / 信息 / 物流的起中终）</a></li>
+      <li><a href="#sec3">资金流深挖（支付 → 商家结算 → 退款原路返回）</a></li>
+      <li><a href="#sec4">信息流深挖（用户下单 → 商家后台 → 仓库拣货 → 消息推送）</a></li>
+      <li><a href="#sec5">物流深挖（商家发货 → 物流公司 → 用户签收）</a></li>
+      <li><a href="#sec6">订单状态机（6 个状态全图）</a></li>
+      <li><a href="#sec7">状态迁移触发条件表（核心交付物）</a></li>
+      <li><a href="#sec8">订单自动取消 / 自动确认收货任务（OrderTask）</a></li>
+      <li><a href="#sec9">三流测试切入映射（哪些点最容易爆雷）</a></li>
+      <li><a href="#sec10">下一步：模块边界与可测点</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（第 1 课的关键点）</h2>
+  <p>第 1 课讲了三件事：</p>
+  <ol>
+    <li>mall4j 是 B2C 单商户电商，<code>yami-shop-api</code>(:8086) + <code>yami-shop-admin</code>(:8085) 两套后端分别服务用户端与管理端。</li>
+    <li>主链路是 <code>商品/SKU → 加购 → 确认订单 → 提交订单 → 支付 → 后台发货</code> 六步。</li>
+    <li>业务要测"流"，不要测"点"——任何孤立用例都是反模式。</li>
+  </ol>
+  <p><strong>本课的承诺</strong>：把"流"这层抽象落成"一笔订单的钱、消息、物件分别怎么走"+ 6 个状态各自由谁触发。掌握这两张图，第 3 课就能直接进入退款链路的接口自动化。</p>
+
+  <h2 id="sec2">2. 三流合一定义（资金 / 信息 / 物流的起中终）</h2>
+  <p>来源：<code>CONTEXT.md</code> 第 6-14 行。术语统一：</p>
+  <table>
+    <thead><tr><th>流</th><th>起点</th><th>中间点</th><th>终点</th><th>测试切入关键词</th></tr></thead>
+    <tbody>
+      <tr><td><strong>资金流</strong></td><td>用户点击支付</td><td>支付网关 / 商家结算系统</td><td>商家收款 / 退款原路返回</td><td>支付回调幂等、退款链路、<code>tz_order_settlement.pay_amount</code></td></tr>
+      <tr><td><strong>信息流</strong></td><td>用户提交订单</td><td>商家后台订单列表 / 仓库拣货系统</td><td>用户侧消息推送（短信 / 站内信）</td><td>状态同步、缓存刷新、事件总线（<code>PaySuccessOrderEvent</code>）</td></tr>
+      <tr><td><strong>物流</strong></td><td>商家后台发货</td><td>物流公司（快递 100 / 顺丰 / 中通）</td><td>用户签收</td><td>物流单号回填、<code>dvy_flow_id</code> 字段、自动确认收货</td></tr>
+    </tbody>
+  </table>
+  <p><strong>关键判断</strong>：三流不是三条平行线，而是<strong>同一笔订单的三个观察面</strong>。一笔订单的钱（资金流）、消息（信息流）、物件（物流）必须<strong>同步前进</strong>，任意一面卡住都会触发订单状态机迁移。</p>
+  <div class="interview">
+    <div class="who">反模式</div>
+    测"支付接口能调通"——单点通过，但若商家后台没看到订单（信息流断）/ 没生成物流单（物流流断），业务整体还是坏的。
+  </div>
+
+  <h2 id="sec3">3. 资金流深挖（支付 → 商家结算 → 退款原路返回）</h2>
+  <p>来源：<code>doc/6-核心业务/6-支付流程.md</code> + <code>doc/7-数据模型/6-订单数据模型.md</code>。</p>
+<pre><code>用户点击支付
+   │
+   ▼
+PayController.normalPay()
+   │  生成 payNo（统一支付流水）
+   │  读取 tz_order_settlement.pay_amount（不接受前端金额）
+   ▼
+开源版直接调用 paySuccess()    ← 注意：本地跑通用，生产不能这么写
+   │
+   ▼
+OrderSettlementMapper.updateToPay()  乐观锁 version+1
+   │
+   ▼
+tz_order.status 1→2（待付款 → 待发货）
+   │
+   ▼
+发布 PaySuccessOrderEvent（事件总线扩展点）</code></pre>
+  <p><strong>退款原路返回</strong>（来源：<code>yami-shop-bean/.../model/OrderRefund.java</code> + <code>OrderRefundParam.java</code>）：</p>
+<pre><code>用户发起退款（applyType=1 仅退款 / 2 退款退货）
+   │
+   ▼
+写入 tz_order_refund（refundSts 处理中）
+   │
+   ▼
+商家审核 → 同意 / 拒绝
+   │
+   ▼
+同意后：
+   - 仅退款：直接调用第三方退款接口
+   - 退款退货：等用户回寄物流单 → 商家收货 → 触发退款
+   │
+   ▼
+调用第三方退款（原路返回 pay_type 对应的渠道）
+   │
+   ▼
+更新 tz_order_refund.returnMoneySts = 1（成功）
+   │
+   ▼
+若整单退款：tz_order.status = 6（关闭）+ refund_sts 更新</code></pre>
+  <p><strong>支付幂等三道关</strong>（写用例时必查）：</p>
+  <ol>
+    <li>同一订单号二次支付：<code>PayServiceImpl</code> 会按 <code>payNo</code> 读取结算表，重复请求被乐观锁拦截。</li>
+    <li>同一支付回调多次到达：<code>PayNoticeController</code> 当前是注释状态，二开必须补齐验签 + 幂等。</li>
+    <li>已支付订单再次点击支付：开源版会再次触发 <code>paySuccess()</code>，需要依赖上层订单状态校验拦截。</li>
+  </ol>
+  <div class="interview">
+    <div class="who">测开面试金句</div>
+    金额看 <code>tz_order_settlement</code>，不信前端传；幂等靠 <code>payNo</code> + 数据库乐观锁双重保险。
+  </div>
+
+  <h2 id="sec4">4. 信息流深挖（用户下单 → 商家后台 → 仓库拣货 → 消息推送）</h2>
+  <p>来源：<code>doc/6-核心业务/5-提交订单.md</code> + <code>yami-shop-api/.../listener/SubmitOrderListener.java</code>。</p>
+<pre><code>OrderController.submitOrders()
+   │
+   ▼
+读取 ConfirmOrderCache（userId → 确认订单快照）
+   │
+   ▼
+发布 SubmitOrderEvent
+   │
+   ▼
+SubmitOrderListener.defaultSubmitOrderListener()  @Order(DEFAULT)
+   │  按店铺拆单（一个店铺一个订单）
+   │  生成 orderNumber（Snowflake，非 DB 主键）
+   │  写入 UserAddrOrder（地址快照，不只存地址 ID）
+   ▼
+批量保存：tz_order + tz_order_item + tz_order_settlement + tz_user_addr_order
+   │
+   ▼
+清理缓存：商品缓存 + SKU 缓存 + 购物车缓存 + ConfirmOrderCache
+   │
+   ▼
+返回 orderNumbers 给前端
+   │
+   ▼
+商家后台：管理端 OrderController 列表查询看到新订单
+   │
+   ▼
+仓库拣货：状态停留在 2（待发货）直到商家发货</code></pre>
+  <p><strong>地址快照的意义</strong>（来源：<code>doc/6-核心业务/5-提交订单.md</code> 第 38 行）：下单后用户改收货地址，<strong>不影响</strong>已提交订单。测试时用 <code>tz_user_addr_order</code> 对照用户地址簿，验证快照正确性。</p>
+  <p><strong>信息流测试陷阱</strong>：</p>
+  <ul>
+    <li>缓存清理失败 → 重复下单导致库存超卖（虽然 SQL 条件更新兜底，但缓存不一致会让用户看到"已下单"但实际库存为 0）。</li>
+    <li>事件监听器异常 → 订单已写入但后续逻辑（清理缓存、发消息）失败，需补偿机制。</li>
+    <li>商家后台查询延迟 → 用户已支付，商家 30 秒后才看到，运营事故。</li>
+  </ul>
+
+  <h2 id="sec5">5. 物流深挖（商家发货 → 物流公司 → 用户签收）</h2>
+  <p>来源：<code>doc/6-核心业务/7-订单管理.md</code> + <code>OrderTask.java</code>。</p>
+<pre><code>管理端 OrderController.delivery()
+   │
+   ▼
+填写 dvy_id（物流公司）+ dvy_flow_id（物流单号）
+   │
+   ▼
+tz_order.status 2→3（待发货 → 待收货）
+   │
+   ▼
+tz_order.dvy_time = NOW()
+   │
+   ▼
+物流公司对接（开源版未对接，由用户 / 商家手动回填单号）
+   │
+   ▼
+用户主动点击"确认收货"
+   │
+   ▼
+tz_order.status 3→4（待收货 → 待评价）
+   │
+   ▼
+用户评价
+   │
+   ▼
+tz_order.status 4→5（待评价 → 成功），product_count +1</code></pre>
+  <p><strong>自动确认收货</strong>（来源：<code>OrderTask.java:71-88</code>）：管理端 XXL-JOB 定时任务 <code>confirmOrder</code> 每 15 天扫一次 <code>status=3</code> 的订单，自动 <code>status=3→5</code>。这意味着"已发货"15 天后即使用户不点确认收货，系统也会自动结单。</p>
+  <p><strong>物流流测试陷阱</strong>：</p>
+  <ul>
+    <li>物流单号格式校验（不同物流公司单号长度 / 前缀不同）。</li>
+    <li>重复发货：发货按钮防重点（管理端需要按订单号锁定）。</li>
+    <li>自动确认收货定时任务边界：15 天阈值是否可配置；订单在 14 天时人工确认收货是否能正常迁移。</li>
+  </ul>
+
+  <h2 id="sec6">6. 订单状态机（6 个状态全图）</h2>
+  <p>来源：<code>yami-shop-bean/.../enums/OrderStatus.java</code> + <code>doc/7-数据模型/6-订单数据模型.md</code> 第 73-78 行。</p>
+  <table>
+    <thead><tr><th>状态值</th><th>枚举名</th><th>中文</th><th>数据库 <code>tz_order.status</code></th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><code>UNPAY</code></td><td>待付款</td><td>1</td></tr>
+      <tr><td>2</td><td><code>PADYED</code></td><td>待发货</td><td>2</td></tr>
+      <tr><td>3</td><td><code>CONSIGNMENT</code></td><td>待收货</td><td>3</td></tr>
+      <tr><td>4</td><td><code>CONFIRM</code></td><td>待评价</td><td>4</td></tr>
+      <tr><td>5</td><td><code>SUCCESS</code></td><td>成功</td><td>5</td></tr>
+      <tr><td>6</td><td><code>CLOSE</code></td><td>失败或关闭</td><td>6</td></tr>
+    </tbody>
+  </table>
+<pre><code>                    用户提交订单
+   [*] ────────────────────────────► (UNPAY=1 待付款)
+                                       │
+                              ┌────────┴──────────────┐
+                              │                       │
+                       paySuccess()            超时 30 分钟 / 手动取消
+                              │                  OrderTask.cancelOrder
+                              ▼                       │
+                          (PADYED=2 待发货)           │
+                              │                       │
+                              ├───────────────────────┤
+                              │                       │
+                  OrderController.delivery()    发货前整单退款
+                              │                  RefundController.agree
+                              ▼                       │
+                       (CONSIGNMENT=3 待收货)          │
+                              │                       │
+                  ┌───────────┴────────────┐          │
+                  │                        │          │
+        MyOrderController.confirm()  OrderTask.confirmOrder  │
+        (用户主动)                  (15 天自动)       │
+                  │                        │          │
+                  ▼                        ▼          ▼
+            (CONFIRM=4 待评价)      (SUCCESS=5 成功)  (CLOSE=6 关闭)
+                  │                        ▲
+        OrderController.comment()           │
+        (用户评价) ───────────────────────►─┘</code></pre>
+  <p><strong>注意</strong>：开源版没有"退款中"这个独立状态——退款走的是 <code>tz_order_refund</code> 子表，<code>tz_order.status</code> 仍可能是 3（待收货，退货中）或 6（已关闭，整单退）。</p>
+
+  <h2 id="sec7">7. 状态迁移触发条件表（核心交付物）</h2>
+  <p>这是本课"具体可验证的 win"——把这张表抄进自己的笔记本，面试官问"订单状态怎么转"时直接画：</p>
+  <table>
+    <thead><tr><th>起始状态</th><th>目标状态</th><th>触发动作</th><th>触发方</th><th>代码入口</th><th>副作用</th></tr></thead>
+    <tbody>
+      <tr><td>— (无)</td><td>UNPAY (1)</td><td>用户提交订单</td><td>用户</td><td><code>OrderController.submitOrders</code></td><td>写 <code>tz_order</code>、扣减库存</td></tr>
+      <tr><td>UNPAY (1)</td><td>PADYED (2)</td><td>支付成功</td><td>用户 / 系统</td><td><code>PayController.normalPay</code></td><td>更新 <code>tz_order_settlement</code>、发 <code>PaySuccessOrderEvent</code></td></tr>
+      <tr><td>UNPAY (1)</td><td>CLOSE (6)</td><td>超时未支付（30 分钟）</td><td>系统</td><td><code>OrderTask.cancelOrder</code></td><td>还原库存、清理缓存</td></tr>
+      <tr><td>UNPAY (1)</td><td>CLOSE (6)</td><td>用户手动取消</td><td>用户</td><td><code>MyOrderController.cancel</code></td><td>还原库存、清理缓存</td></tr>
+      <tr><td>PADYED (2)</td><td>CONSIGNMENT (3)</td><td>商家发货</td><td>商家</td><td>管理端 <code>OrderController.delivery</code></td><td>写 <code>dvy_id</code> + <code>dvy_flow_id</code>、<code>dvy_time = NOW()</code></td></tr>
+      <tr><td>PADYED (2)</td><td>CLOSE (6)</td><td>发货前整单退款</td><td>商家 / 用户</td><td><code>RefundController.agree</code></td><td>退款走第三方、库存扣减保留</td></tr>
+      <tr><td>CONSIGNMENT (3)</td><td>CONFIRM (4)</td><td>用户确认收货</td><td>用户</td><td><code>MyOrderController.confirm</code></td><td><code>finally_time = NOW()</code></td></tr>
+      <tr><td>CONSIGNMENT (3)</td><td>SUCCESS (5)</td><td>15 天自动确认</td><td>系统</td><td><code>OrderTask.confirmOrder</code></td><td>跳过评价直接结单</td></tr>
+      <tr><td>CONFIRM (4)</td><td>SUCCESS (5)</td><td>用户评价</td><td>用户</td><td><code>OrderController.comment</code></td><td><code>product_count +1</code>（商品销量）</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">测开用法</div>
+    每个状态迁移至少有 3 条用例——正常路径、异常路径（非法前置状态）、幂等路径（重复触发）。
+  </div>
+
+  <h2 id="sec8">8. 订单自动取消 / 自动确认收货任务（OrderTask）</h2>
+  <p>来源：<code>yami-shop-admin/.../task/OrderTask.java</code>（完整 90 行）。</p>
+<pre><code>@XxlJob("cancelOrder")
+public void cancelOrder() {
+    Date now = new Date();
+    // 扫 30 分钟前 status=1 且未支付的订单
+    List&lt;Order&gt; orders = orderService.listOrderAndOrderItems(
+        OrderStatus.UNPAY.value(),
+        DateUtil.offsetMinute(now, -30)
+    );
+    if (CollectionUtil.isEmpty(orders)) return;
+    orderService.cancelOrders(orders);  // SQL: status=6, cancel_time=NOW()
+    // 清理商品 + SKU 缓存
+}</code></pre>
+<pre><code>@XxlJob("confirmOrder")
+public void confirmOrder() {
+    Date now = new Date();
+    // 扫 15 天前 status=3 的订单
+    List&lt;Order&gt; orders = orderService.listOrderAndOrderItems(
+        OrderStatus.CONSIGNMENT.value(),
+        DateUtil.offsetDay(now, -15)
+    );
+    if (CollectionUtil.isEmpty(orders)) return;
+    orderService.confirmOrder(orders);  // SQL: status=5, finally_time=NOW()
+    // 清理商品 + SKU 缓存
+}</code></pre>
+  <p><strong>关键设计</strong>：</p>
+  <ul>
+    <li>两个定时任务都用 <code>orderService.listOrderAndOrderItems()</code> 扫表，传 <code>update_time &lt; ?</code> 做时间窗。</li>
+    <li>时间阈值硬编码（30 分钟 / 15 天），<strong>配置文件里没暴露</strong>——二开要点。</li>
+    <li>XXL-JOB 配置在 <code>application-dev.yml</code> 和 <code>application-docker.yml</code>，本地启动需先跑 XXL-JOB Admin。</li>
+    <li>任务执行后清理商品 / SKU 缓存，避免脏数据。</li>
+  </ul>
+  <p><strong>测试切入点</strong>：</p>
+  <ol>
+    <li>阈值边界：订单 <code>update_time</code> 在 29 分 59 秒 / 30 分 01 秒 / 14 天 23 时 59 分 / 15 天 00 分 01 秒。</li>
+    <li>并发：同一订单被两个定时任务实例同时扫到（XXL-JOB 调度路由要保证单实例执行）。</li>
+    <li>失败补偿：定时任务异常后下一次是否能重试（XXL-JOB 失败策略）。</li>
+  </ol>
+
+  <h2 id="sec9">9. 三流测试切入映射（哪些点最容易爆雷）</h2>
+  <table>
+    <thead><tr><th>流</th><th>高风险接口</th><th>关键测试点</th><th>典型 Bug 模式</th></tr></thead>
+    <tbody>
+      <tr><td><strong>资金流</strong></td><td><code>PayController.normalPay</code></td><td>金额不被前端覆盖、回调幂等、乐观锁</td><td>前端传 0.01 元 → 实际支付金额被 DB 兜住</td></tr>
+      <tr><td><strong>资金流</strong></td><td><code>PayNoticeController</code></td><td>验签、幂等 token、重复回调</td><td>同笔回调触发两次退款</td></tr>
+      <tr><td><strong>资金流</strong></td><td>退款接口</td><td>仅退款 vs 退款退货分支、原路返回</td><td>微信订单退到支付宝</td></tr>
+      <tr><td><strong>信息流</strong></td><td><code>OrderController.submitOrders</code></td><td>缓存一致性、地址快照、库存条件更新</td><td>用户改地址影响历史订单</td></tr>
+      <tr><td><strong>信息流</strong></td><td><code>ConfirmOrderCache</code></td><td>缓存过期、二次确认订单</td><td>"订单已过期，请重新下单"</td></tr>
+      <tr><td><strong>信息流</strong></td><td><code>OrderController.confirm</code></td><td>事件监听器异常处理</td><td>库存扣了但订单没写</td></tr>
+      <tr><td><strong>物流</strong></td><td>管理端发货</td><td>物流单号格式校验、重复发货</td><td>单号错填导致用户查不到物流</td></tr>
+      <tr><td><strong>物流</strong></td><td><code>OrderTask.confirmOrder</code></td><td>15 天阈值、并发执行</td><td>用户第 14 天想退款，订单已被自动结单</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">面试答法（3 句话）</div>
+    测资金流先抓金额源头（<code>tz_order_settlement</code>）+ 回调幂等；测信息流先抓事件总线 + 缓存清理；测物流先抓发货防重 + 自动确认收货阈值。
+  </div>
+
+  <h2 id="sec10">10. 下一步：模块边界与可测点</h2>
+  <p>本课建立了订单生命周期的"流 + 状态机"心智模型。第 3 课将进入：</p>
+  <ul>
+    <li><strong>模块边界图</strong>：在白板上画出 <code>yami-shop-api</code>（用户端）vs <code>yami-shop-admin</code>（管理端）vs <code>front-end/mall4v</code>（管理后台前端）的接口归属——把"哪个 Controller 在哪个模块"画清楚。</li>
+    <li><strong>可测点清单</strong>：从每个模块里独立挑出 ≥ 3 个可测点，对应到等价类 / 边界值 / 场景法 / 状态迁移中的至少一种方法。</li>
+    <li><strong>第一份接口用例</strong>：登录 → 加购 → 下单 → 支付，用 Postman / Knife4j 跑通最小闭环，把第 2 课的状态机跑实一次。</li>
+  </ul>
+  <p><strong>本课 win 验证</strong>：你能在 5 分钟内画完第 7 节的 9 行状态迁移表，并说出每行触发方 + 代码入口——这就是 MISSION.md 里的"1500 字状态机迁移与幂等保证"的素材。</p>
+  <p><strong>预习</strong>（可选）：读 <code>doc/6-核心业务/5-提交订单.md</code> 第 33-42 行关键设计部分，带着"为什么订单要按店铺拆单"的疑问进第 3 课。</p>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（三流定义 / 状态机 / 定时任务阈值 / 退款原路返回 / 地址快照）抛给你的 AI 教师追问——单点困惑往往牵出一整条业务链，问得越具体，回答越能反哺你的测开作品集。
+  </div>
+
+  <h2>课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>一笔订单的资金流终点（不考虑退款）是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 用户银行卡或微信钱包被扣款的瞬间</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 商家在支付平台的结算账户收到应结货款</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 用户点击支付按钮后立即触发的 paySuccess 调用</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) tz_order_settlement 表 pay_status 字段变为 1 的时刻</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>订单状态机里，"待发货"（status=2）由哪个事件触发迁移到"待收货"（status=3）？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 用户在用户端点击确认收货按钮触发迁移</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 支付成功后系统自动调用 paySuccess 方法触发迁移</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 商家在管理端填写物流公司及单号并保存发货触发迁移</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) OrderTask 的 cancelOrder 定时任务扫描超时订单触发迁移</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>自动确认收货定时任务 <code>OrderTask.confirmOrder</code> 的执行条件是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 扫描 30 分钟前 status=1 的未支付订单触发取消</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 扫描 7 天前 status=3 的已发货订单触发自动确认</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 扫描 15 天前 status=3 的已发货订单触发自动确认</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 扫描 24 小时前 status=4 的待评价订单触发自动关闭</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0001-mall4j-business-overview.html">第 1 课 mall4j 业务全貌</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0003-module-boundary-test-points.html">第 3 课 模块边界与可测点</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0002-order-state-cheatsheet.html">订单状态机速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0002-order-state-cheatsheet.html">订单状态机速查卡（reference/0002-order-state-cheatsheet.html）</a></li>
+      <li><a href="../../doc/6-核心业务/6-支付流程.md">doc/6-核心业务/6-支付流程.md</a></li>
+      <li><a href="../../doc/6-核心业务/7-订单管理.md">doc/6-核心业务/7-订单管理.md</a></li>
+    </ul>
+    <div>第 2 课到这里就完成了，去第 3 课把模块边界画出来。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=C(2), Q3=C(2) ===
+  var correctMap = { q1: '1', q2: '2', q3: '2' };
+
+  var chapterHint = {
+    q1: { href: '#sec2', text: '回到第 2 节：再读"三流合一定义"的资金流终点' },
+    q2: { href: '#sec6', text: '回到第 6 节：再读"订单状态机"的发货迁移' },
+    q3: { href: '#sec8', text: '回到第 8 节：再读"OrderTask"自动确认收货条件' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

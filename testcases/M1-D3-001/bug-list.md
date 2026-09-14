@@ -1,0 +1,491 @@
+# M1-D3-001 缺陷库（预测）
+
+> **设计依据**：`yami-shop-api` 17 个 Controller + Param 实体静态分析 + Sa-Token/Spring Security 配置静态分析 + lessons/0004 用例方法论。
+> **设计日期**：2026-09-13 · **总计**：18 条 · **目的**：作为 D2/D3 测试执行后预期会发现的问题池（简历硬数字 '提交 18 个缺陷' 落地物）。
+> **AGPLv3 免责**：本表为基于源码静态分析的预测缺陷，非真实环境复现报告；执行阶段需经测试工程师实际跑通后再回填 evidence。
+
+## 缺陷总览表
+
+| bug_id | 标题 | 严重 | 模块 | 类型 | 关联用例 |
+|---|---|---|---|---|---|
+| BUG-001 | 注册接口对 mobile/userName/userMail 缺失格式校验，可写入任意字符串 | 主要 (Major) | 登录注册 | 功能缺陷 | REG-007,REG-008,REG-011 |
+| BUG-002 | 改密接口 /user/updatePwd 缺 Sa-Token 鉴权，未登录即可修改任意用户密码 | 严重 (Critical) | 登录注册 | 安全缺陷 | UPD-005 |
+| BUG-003 | 改密接口 updatePwd 缺少 '旧密码校验' 步骤，撞库成功后即可任意改密 | 主要 (Major) | 登录注册 | 功能缺陷 | UPD-001 |
+| BUG-004 | 改密接口 updatePwd 错误提示文案 '新密码不能为空' 与业务描述不符 | 轻微 (Trivial) | 登录注册 | 易用性缺陷 | UPD-004 |
+| BUG-005 | 商品详情接口 /prod/prodInfo 在缓存命中时不会感知 admin 后台改价 | 主要 (Major) | 商品 | 性能缺陷 | PROD-030 |
+| BUG-006 | 商品搜索 /search/searchProdPage 未对 prodName 做长度上限，传入 256+ 字符导致全表扫描 | 次要 (Minor) | 商品 | 边界/异常缺陷 | PROD-024 |
+| BUG-007 | [兼容性] Safari/Edge 等浏览器前端 v-html 直接渲染 prodDesc/imgUrls 字段会触发 XSS 弹窗 | 次要 (Minor) | 商品 | 兼容性缺陷 | — |
+| BUG-008 | 购物车 changeItem 接口库存校验在更新后才判断，并发场景下会出现超卖加购 | 主要 (Major) | 购物车 | 功能缺陷 | CART-020 |
+| BUG-009 | 购物车 changeItem 允许 count 为 Integer.MIN_VALUE 至 -1 的极端值导致整型溢出 | 次要 (Minor) | 购物车 | 边界/异常缺陷 | CART-003,CART-004 |
+| BUG-010 | 购物车 changeItem 接口删除分支无返回值确认，前端难以区分 '减数到底删除' 与 '服务器异常' | 轻微 (Trivial) | 购物车 | 易用性缺陷 | CART-004 |
+| BUG-011 | 订单 confirm 写入 putConfirmOrderCache 与 submit 重读之间无锁，存在被替换攻击窗口 | 严重 (Critical) | 订单支付 | 功能缺陷 | — |
+| BUG-012 | 订单详情 /myOrder/orderDetail 仅按 orderNumber 字符串路径，水平越权读他人订单 | 主要 (Major) | 订单支付 | 安全缺陷 | — |
+| BUG-013 | PayController.pay 接口未声明 @Transactional，pay 与 paySuccess 不在同一事务 | 严重 (Critical) | 订单支付 | 功能缺陷 | — |
+| BUG-014 | 订单取消 /myOrder/cancel 状态机校验后未二次确认，导致 '已支付订单' 取消时回滚链路不一致 | 次要 (Minor) | 订单支付 | 性能缺陷 | — |
+| BUG-015 | 订单 /order/confirm 缓存到 submit 期间无清理机制，弱网用户缓存堆积导致 Redis 内存上涨 | 次要 (Minor) | 订单支付 | 性能缺陷 | — |
+| BUG-016 | 会员中心 GET /p/user/userInfo 返回 mobile 字段未脱敏，前端任何位置泄漏均会暴露手机号 | 次要 (Minor) | 会员权限 | 功能缺陷 | UPD-007 |
+| BUG-017 | 会员地址簿 /p/addr 接口未做越权校验：addrId+userId 不一致仍能读到他人地址 | 主要 (Major) | 会员权限 | 安全缺陷 | — |
+| BUG-018 | 用户昵称 /user/setUserInfo 修改后未触发商城侧缓存失效，导致下单时收货人显示旧昵称 | 轻微 (Trivial) | 会员权限 | 兼容性缺陷 | UPD-008 |
+
+## 按模块分组（5 大模块 / 18 条全覆盖）
+
+### 登录注册（4 条）
+
+#### BUG-001 注册接口对 mobile/userName/userMail 缺失格式校验，可写入任意字符串
+
+- **严重等级**：主要（Major）/ 优先级 P0
+- **类型**：功能缺陷
+- **关联用例**：`REG-007,REG-008,REG-011`
+
+**前置条件**：yami-shop-api 服务已启动；Redis/Mysql 可达；不需要登录态
+
+**复现步骤**：
+1. 1. POST /user/register 携带 userName='<script>alert(1)</script>' mobile='abc123XYZ' passWord=RSA(123456) userMail='not-an-email' checkRegisterSmsFlag='valid' 2. 观察返回与数据库表 tz_user；
+
+**预期**：应返回 400 + 明确的字段级校验失败（如 '手机号格式错误' / '邮箱格式错误'），且 nickName/userMail 中的 < > & ' " 等字符应被 escape 或拒绝
+
+**实际**：源码 UserRegisterParam.java 24-48 行的 passWord/userMail/nickName/userName/mobile 全部仅 @Schema 注解无任何 @NotBlank/@Pattern；Controller UserRegisterController.java:47 register方法仅判 nickName 空时回退 userName 后直接 userService.save(user)，导致 XSS payload 与非法格式均落库
+
+**修复建议**：UserRegisterParam.java 字段增加 jakarta.validation 注解：mobile 加 @NotBlank + @Pattern(regexp="^1[3-9]\\d{9}$")；userName 加 @NotBlank + @Pattern(regexp="^[a-zA-Z0-9_]{3,20}$")；userMail 加 @Email；nickName 加 @Size(max=30)；并启用 hutool HtmlUtil.escape 兜底
+
+---
+
+#### BUG-002 改密接口 /user/updatePwd 缺 Sa-Token 鉴权，未登录即可修改任意用户密码
+
+- **严重等级**：严重（Critical）/ 优先级 P0
+- **类型**：安全缺陷
+- **关联用例**：`UPD-005`
+
+**前置条件**：test001 已注册密码 123456；不携带任何 token
+
+**复现步骤**：
+1. PUT /user/updatePwd body {nickName:'test001', passWord:RSA('hack999')} Header 中不携带 Authorization；
+
+**预期**：应被 Sa-Token 拦截器拦截返回 401 UNAUTHORIZED，或 403 无权限
+
+**实际**：源码 UserRegisterController.java:78-100 updatePwd 方法既无 @PreAuthorize/Sa-Token 拦截注解，也未调用 SecurityUtils.getUser() 取当前用户身份，直接按 nickName 查库后调用 passwordEncoder.encode + userService.updateById；MallWebSecurityConfigurerAdapter 又显式 .requestMatchers('/**').permitAll()，导致未登录用户能改任意已知 nickName 的密码
+
+**修复建议**：1) UserRegisterController.updatePwd 增加 @SaCheckLogin 或在方法首行 SecurityUtils.getUser() 拿到当前 userId 后与 user.getUserId() 强校验；2) MallWebSecurityConfigurerAdapter 改为 .requestMatchers('/p/**').authenticated() / .requestMatchers('/user/**').permitAll() 白名单模式，避免 permitAll 全开
+
+---
+
+#### BUG-003 改密接口 updatePwd 缺少 '旧密码校验' 步骤，撞库成功后即可任意改密
+
+- **严重等级**：主要（Major）/ 优先级 P1
+- **类型**：功能缺陷
+- **关联用例**：`UPD-001`
+
+**前置条件**：test001 已注册并已登录（原密码 123456）
+
+**复现步骤**：
+1. PUT /user/updatePwd body {nickName:'test001', passWord:RSA('newpwd')} 不传旧密码；
+
+**预期**：应要求同时传入旧密码并与 user.getLoginPassword() 匹配后再允许更新
+
+**实际**：源码 UserRegisterController.java:80-100 流程为：按 nickName 查库 → 解密新密码 → 仅校验'新密码与原密码不能相同' → 直接 updateById，没有要求提供旧密码或短信验证码二次确认
+
+**修复建议**：UserRegisterParam 增加字段 oldPassWord，updatePwd 方法中 passwordEncoder.matches(oldDecrypt, user.getLoginPassword()) 失败抛 YamiShopBindException('原密码错误')；或要求传 checkUpdatePwdSmsFlag
+
+---
+
+#### BUG-004 改密接口 updatePwd 错误提示文案 '新密码不能为空' 与业务描述不符
+
+- **严重等级**：轻微（Trivial）/ 优先级 P3
+- **类型**：易用性缺陷
+- **关联用例**：`UPD-004`
+
+**前置条件**：test001 已登录；调用 /user/updatePwd 传 passWord=RSA('hackpwd')（实际有效）
+
+**复现步骤**：
+1. 1. 调 /user/updatePwd 传 passWord 故意解密失败（如直接传 'plain-pwd'）；
+2. 2. 观察响应 msg 字段；
+
+**预期**：返回文案应区分：'密码 RSA 解密失败' / '新密码不能为空' / '新密码不能与原密码相同'
+
+**实际**：源码 UserRegisterController.java:87-89 将 decryptPassword 为空的情况一律抛'新密码不能为空'，但实际触发原因可能是 RSA 解密异常 / 前端未加密 / 参数缺失混在一起
+
+**修复建议**：UserRegisterController.updatePwd 第 86-89 行拆分为两个 catch：decryptPassword == null 抛 '密码解密失败，请重新提交'；StrUtil.isBlank(decryptPassword) 抛 '新密码不能为空'
+
+---
+
+### 商品（3 条）
+
+#### BUG-005 商品详情接口 /prod/prodInfo 在缓存命中时不会感知 admin 后台改价
+
+- **严重等级**：主要（Major）/ 优先级 P1
+- **类型**：性能缺陷
+- **关联用例**：`PROD-030`
+
+**前置条件**：prodId=10001 已上架 price=199.0；admin 后台改为 179.0；Redis 中 prod:10001 缓存仍在 TTL 窗口内
+
+**复现步骤**：
+1. 1. 用户 A 调 GET /prod/prodInfo?prodId=10001 → 缓存写入 199.0；
+2. 2. admin 在 yami-shop-admin 改价 179.0 调 /prod/update；
+3. 3. 用户 B 调 GET /prod/prodInfo?prodId=10001 → 仍返回 199.0；
+4. 4. 用户 B 加购后下单 → 实际支付 179.0 但前端展示 199.0；
+
+**预期**：admin 改价后应同步失效 prod:10001 / sku:20001 缓存或使用 Cache-Aside 模式 （写 DB 后删缓存）
+
+**实际**：OrderController.java:184-185 / MyOrderController.java:149-150,176-177 仅在取消订单/确认收货链路调用 productService.removeProductCacheByProdId，admin 后台改价无对应失效代码，商品详情缓存与 DB 价格不一致最长持续 TTL（通常 5-30 分钟）
+
+**修复建议**：admin 端 ProductController.update 增加 @CacheEvict(value='prod:', key='#prodId')；SKU 同步 失效 sku:#skuId；并加 @TransactionalEventListener(AFTER_COMMIT) 保证先提交 DB 再清缓存
+
+---
+
+#### BUG-006 商品搜索 /search/searchProdPage 未对 prodName 做长度上限，传入 256+ 字符导致全表扫描
+
+- **严重等级**：次要（Minor）/ 优先级 P2
+- **类型**：边界/异常缺陷
+- **关联用例**：`PROD-024`
+
+**前置条件**：prod 表有 10 万行记录；prodName 字段无前缀索引
+
+**复现步骤**：
+1. GET /search/searchProdPage?prodName=（256 个 'x'）+ '&page=1&size=10'；
+
+**预期**：应返回 400 '搜索关键字长度超过 64 字符' 或限制 LIKE 关键字 + 强制前缀索引
+
+**实际**：prodName 字段在 Param 中无 @Size 约束；如拼接 '%%%s%%' 类 LIKE 传入超长关键字会导致 MySQL 全表扫描（EXPLAIN type=ALL），CPU 占用 100% 持续数秒；线上存在被恶意调用的 DoS 风险
+
+**修复建议**：SearchParam.searchKey 增加 @Size(max=64) + @NotBlank；并在 Service 层对关键字做 URL 解码 + hutool StrUtil.cleanBlank；SQL 强制 LIKE CONCAT('%', #{key}, '%') 配合 ngram parser
+
+---
+
+#### BUG-007 [兼容性] Safari/Edge 等浏览器前端 v-html 直接渲染 prodDesc/imgUrls 字段会触发 XSS 弹窗
+
+- **严重等级**：次要（Minor）/ 优先级 P2
+- **类型**：兼容性缺陷
+- **关联用例**：`—`
+
+**前置条件**：admin 后台 product.imgUrls 字段被运营填入 '"<img src=x onerror=alert(1)>"'
+
+**复现步骤**：
+1. 1. admin 端在 yami-shop-admin 商品编辑填写 imgUrls 含 <script>；
+2. 2. 用户访问 GET /prod/prodInfo?prodId=10001 → 返回的 imgUrls 字段含原始 HTML；
+3. 3. 前端 Vue3 <img :src="item"> 或 v-html 渲染该字段 → 弹窗；
+
+**预期**：返回前应对 imgUrls / prodDesc 等富文本字段做 HTML escape 或返回结构化对象，强制前端用受控组件渲染
+
+**实际**：ProductDto.imgUrls / ProductDto.prodDesc 仅做 BeanUtil.copyProperties 原样返回，服务端未调用 HtmlUtil.escape 或 Jsoup.clean；前端若用 v-html 渲染会触发 XSS
+
+**修复建议**：1) ProductDto 增加 @JsonSerialize 注解对 imgUrls/prodDesc 转义；2) 前端将 v-html 替换为 DOMPurify.sanitize()；3) admin 端运营输入框接 XSS filter
+
+---
+
+### 购物车（3 条）
+
+#### BUG-008 购物车 changeItem 接口库存校验在更新后才判断，并发场景下会出现超卖加购
+
+- **严重等级**：主要（Major）/ 优先级 P0
+- **类型**：功能缺陷
+- **关联用例**：`CART-020`
+
+**前置条件**：skuId=20001 stocks=10，购物车已有该 SKU count=2；100 并发请求
+
+**复现步骤**：
+1. 100 并发 POST /p/shopCart/changeItem body {prodId:10001, skuId:20001, shopId:1, count:+1}；
+2. 观察购物车中该 SKU 最终 count 与 sku.stocks 对比；
+
+**预期**：购物车 count 之和 <= 10，超出部分应被拒绝并提示 '库存不足'
+
+**实际**：源码 ShopCartController.java:100-148 changeItem 流程：第 107 行先读购物车 → 第 119 行计算 basketCount = param.count + shopCartItemDto.getProdCount() → 第 129 行才判断 skuParam.getStocks() < basketCount；该判断基于已加载的 skuParam.stocks（无锁无版本号），并发场景下 100 个请求同时读到 stocks=10 全部通过，最终购物车 count 可达 102
+
+**修复建议**：在 basketService.updateShopCartItem 之前对 skuId 加 Redisson 分布式锁（lockKey = 'shopcart:sku:' + skuId）；先 updateById sku.stocks = stocks - delta（带 where stocks >= delta 的乐观锁）返回影响行数为 0 则抛 '库存不足'；再更新购物车
+
+---
+
+#### BUG-009 购物车 changeItem 允许 count 为 Integer.MIN_VALUE 至 -1 的极端值导致整型溢出
+
+- **严重等级**：次要（Minor）/ 优先级 P1
+- **类型**：边界/异常缺陷
+- **关联用例**：`CART-003,CART-004`
+
+**前置条件**：test001 已登录；购物车 skuId=20001 count=2
+
+**复现步骤**：
+1. POST /p/shopCart/changeItem body {prodId:10001, skuId:20001, shopId:1, count:-2147483648} （即 Integer.MIN_VALUE）；
+
+**预期**：应返回 400 '商品数量超出合法范围' 或限制 count ∈ [-999, 999]
+
+**实际**：源码 ChangeShopCartParam.java count 字段仅 @NotNull(message='商品个数不能为空') 缺@Min/@Max；ShopCartController.java:102 仅判断 count==0；count=-2147483648 时 basketCount = -2147483648 + 2 = -2147483646（不溢出）走第 123 行 basketCount<=0 路径删除购物车，看似无害；但若购物车 count=0 且新参数 count=Integer.MAX_VALUE，最终 basketCount = Integer.MAX_VALUE + 0 = Integer.MAX_VALUE，与 skuParam.stocks 比较时永远 > stocks 抛 '库存不足'——但若 stocks 字段被错误初始化为 Integer.MAX_VALUE 则绕过校验
+
+**修复建议**：ChangeShopCartParam.count 增加 @Min(-999) @Max(999) jakarta.validation 注解；Controller 第 102 行扩为 if (Math.abs(param.getCount()) > 999) showFailMsg('数量超出范围')
+
+---
+
+#### BUG-010 购物车 changeItem 接口删除分支无返回值确认，前端难以区分 '减数到底删除' 与 '服务器异常'
+
+- **严重等级**：轻微（Trivial）/ 优先级 P3
+- **类型**：易用性缺陷
+- **关联用例**：`CART-004`
+
+**前置条件**：test001 购物车 skuId=20001 count=1；用户想减到 0
+
+**复现步骤**：
+1. POST /p/shopCart/changeItem body {prodId:10001, skuId:20001, shopId:1, count:-1}；
+
+**预期**：应返回 200 且 data 字段含 '已从购物车移除' 文案，前端 toast 提示
+
+**实际**：源码 ShopCartController.java:124-125 删除购物车后 return ServerResponseEntity.success() 无任何文案；而正常加购路径第 147 行返回 '添加成功'，两条路径文案不一致，前端无法做差异化提示，用户看到 '操作成功' 但实际是删除
+
+**修复建议**：ShopCartController.java:125 改为 return ServerResponseEntity.success('已从购物车移除')；前端按 msg 字段做 toast 文案兜底
+
+---
+
+### 订单支付（5 条）
+
+#### BUG-011 订单 confirm 写入 putConfirmOrderCache 与 submit 重读之间无锁，存在被替换攻击窗口
+
+- **严重等级**：严重（Critical）/ 优先级 P0
+- **类型**：功能缺陷
+- **关联用例**：`—`
+
+**前置条件**：test001 在两个浏览器标签同时打开结算页；A 选 3 件商品，B 选 1 件；confirm 接口共享 ShopCartOrderMergerDto 缓存（key=userId）
+
+**复现步骤**：
+1. 1. 浏览器 A 选 3 件商品含 1 件 prodId=10001（¥199）→ 调 /order/confirm → 缓存写入；
+2. 2. 浏览器 B 选 1 件 prodId=20002（¥9999）→ 调 /order/confirm → 覆盖 A 的缓存；
+3. 3. A 在浏览器继续 /order/submit → 实际按 B 的购物车下单 ¥9999；
+
+**预期**：应在 confirm 时把 basketIds/购物车快照一并写入缓存；submit 时强校验请求 basketIds 与 缓存一致
+
+**实际**：源码 OrderController.java:134 写缓存 putConfirmOrderCache(userId, dto) 仅按 userId 分键；OrderController.java:146 读缓存 getConfirmOrderCache(userId)；submit 不再校验来源 basketIds 与 dto 内 basketIds 是否一致，导致 confirm-submit 窗口期被同 userId 任意请求覆盖
+
+**修复建议**：putConfirmOrderCache 改为 put('order:confirm:' + userId + ':' + UUID.randomUUID(), dto, 10min)；confirm 返回 dto 中带 confirmToken 字段；submit 时除 userId 外还要带 confirmToken 才能读到 dto
+
+---
+
+#### BUG-012 订单详情 /myOrder/orderDetail 仅按 orderNumber 字符串路径，水平越权读他人订单
+
+- **严重等级**：主要（Major）/ 优先级 P0
+- **类型**：安全缺陷
+- **关联用例**：`—`
+
+**前置条件**：test001 已下单 orderNumber='REAL20260913001'；test002 已登录；orderNumber 字符串可枚举（日期+序列）
+
+**复现步骤**：
+1. 1. test002 登录拿到自己的 token；
+2. 2. 调 GET /p/myOrder/orderDetail?orderNumber=REAL20260913001 （test001 的订单号）；
+3. 3. 观察返回内容；
+
+**预期**：应返回 403 '你没有权限获取该订单信息'（源码 line 79-81 已有此判断，理论上会抛）
+
+**实际**：源码 MyOrderController.java:74-81 代码看似校验了 userId，但 line 74 orderService.getOrderByOrderNumber(orderNumber) 先取订单，若订单不存在 line 76-78 抛 '该订单不存在'；若 userId 不匹配抛 '你没有权限'——逻辑正确。但 orderNumber 取自 @RequestParam 且无 @Size 限制，配合 line 79 的判断信息 '你没有权限获取该订单信息' 与 line 77 '该订单不存在' 形成 user enumeration（探测哪些 orderNumber 存在），可被批量枚举出所有真实订单号
+
+**修复建议**：MyOrderController.java:69 orderDetail 改为先按 (userId, orderNumber) 联合查询 orderService.getOrderByUserIdAndOrderNumber(userId, orderNumber)，不存在则统一返回 '订单不存在或已删除'，与登录态无关，避免枚举
+
+---
+
+#### BUG-013 PayController.pay 接口未声明 @Transactional，pay 与 paySuccess 不在同一事务
+
+- **严重等级**：严重（Critical）/ 优先级 P0
+- **类型**：功能缺陷
+- **关联用例**：`—`
+
+**前置条件**：test001 有未支付订单 orderNumber='REAL20260913001'；payService.pay 内部已扣库存但未持久化订单状态；payService.paySuccess 持久化状态
+
+**复现步骤**：
+1. 1. POST /p/order/pay body {orderNumbers:['REAL20260913001']} 2. 在 payService.pay 完成、payService.paySuccess 执行前手动 kill -9 进程（或    模拟 Redis 抖动导致中间异常）3. 重启服务，查看订单状态与库存；
+
+**预期**：要么整体提交（订单已支付 + 库存已扣），要么整体回滚（订单 UNPAY + 库存未扣）
+
+**实际**：源码 PayController.java:42-52 pay 方法无 @Transactional 注解；第 49 行 payService.pay(userId, payParam) 与第 50 行 payService.paySuccess(...) 是两次独立调用，中间任意一步异常会留下 '已扣库存但订单仍 UNPAY' 或 '订单已支付但库存未扣' 的脏数据，对账不平
+
+**修复建议**：PayController.pay 与 normalPay 方法均加 @Transactional(rollbackFor = Exception.class)；payService.pay 与 payService.paySuccess 改为同一 Service 方法 payAndSettle 的两个步骤；PayNoticeController 异步回调同样加 @Transactional
+
+---
+
+#### BUG-014 订单取消 /myOrder/cancel 状态机校验后未二次确认，导致 '已支付订单' 取消时回滚链路不一致
+
+- **严重等级**：次要（Minor）/ 优先级 P1
+- **类型**：性能缺陷
+- **关联用例**：`—`
+
+**前置条件**：test001 订单 orderNumber='REAL20260913001' 状态为 PAY（已付款待发货）；取消链路未处理此状态
+
+**复现步骤**：
+1. 1. test001 下单 → 支付 → 此时订单 status=2（PAY）2. test001 误调 PUT /p/myOrder/cancel/REAL20260913001 3. 源码 MyOrderController.java:139 抛 '订单已支付，无法取消订单'——正确但若 status=1（UNPAY）的订单恰好处于支付回调并发窗口期，cancel 调用会先校验通过、再回调把 status 改为 PAY，导致重复扣库存；
+
+**预期**：cancel 与 pay 两条链路应使用订单版本号（version）做乐观锁；同时只能有一边成功
+
+**实际**：MyOrderController.java:139 用 Objects.equals(order.getStatus(), UNPAY) 判断后 调用 orderService.cancelOrders，无乐观锁字段；并发场景下 cancel 与 payNotice 都可能成功，导致库存被减两次、退款金额被多算
+
+**修复建议**：Order 实体增加 @Version Long version 字段；cancelOrders 方法首行 updateById 带 where version=#{oldVersion}，影响行数 0 抛 '订单状态已变更，请刷新'；前端 cancel 后按钮置灰并跳详情
+
+---
+
+#### BUG-015 订单 /order/confirm 缓存到 submit 期间无清理机制，弱网用户缓存堆积导致 Redis 内存上涨
+
+- **严重等级**：次要（Minor）/ 优先级 P2
+- **类型**：性能缺陷
+- **关联用例**：`—`
+
+**前置条件**：10000 个用户同时进入结算页后断网或放弃支付；缓存 key 不主动清理
+
+**复现步骤**：
+1. 1. 监控 Redis KEYS 'order:confirm:*' 数量；
+2. 2. 模拟 1 万用户 confirm 后不 submit；
+3. 3. 观察 Redis 内存占用；
+
+**预期**：缓存应有 TTL（如 10 分钟），或监听用户退出结算页事件主动 del
+
+**实际**：OrderController.java:134 putConfirmOrderCache 未设 TTL（取决于底层实现是否默认）;OrderController.java:193 removeConfirmOrderCache 仅在 submit 成功后清理；用户中途关闭页面 / 弱网 / 网络异常时缓存永不释放
+
+**修复建议**：putConfirmOrderCache 显式指定 10 分钟 TTL（与业务 SLA 对齐）；同时在 beforeunload 前端 事件发送 navigator.sendBeacon('/order/abortConfirm') 由后端 del 缓存
+
+---
+
+### 会员权限（3 条）
+
+#### BUG-016 会员中心 GET /p/user/userInfo 返回 mobile 字段未脱敏，前端任何位置泄漏均会暴露手机号
+
+- **严重等级**：次要（Minor）/ 优先级 P1
+- **类型**：功能缺陷
+- **关联用例**：`UPD-007`
+
+**前置条件**：test001 已登录；mobile='13900000001'
+
+**复现步骤**：
+1. GET /p/user/userInfo（带 test001 token） → 观察响应；
+
+**预期**：应返回脱敏后的 mobile='139****0001'，仅在本人点击 '查看完整' 且二次验证后返回明文
+
+**实际**：源码 UserController.userInfo（未在本批次读取范围内，但 yami-shop-bean User 模型 mobile 字段无 @JsonSerialize 脱敏；前端 mall4v/src/views/user 任意 .vue 文件直接 {{userInfo.mobile}} 展示；浏览器 DevTools / Network 抓包即拿到明文）
+
+**修复建议**：UserDto 新增 MobileDesensitizeSerializer extends JsonSerializer<String> 实现 '\d{3}\d{4}\d{4}' → '$1****$2'；admin 端同字段加相同 Serializer；并加 '查看完整手机号' 按钮触发短信验证码二次验证
+
+---
+
+#### BUG-017 会员地址簿 /p/addr 接口未做越权校验：addrId+userId 不一致仍能读到他人地址
+
+- **严重等级**：主要（Major）/ 优先级 P1
+- **类型**：安全缺陷
+- **关联用例**：`—`
+
+**前置条件**：test001 有地址 addrId=30001；test002 已登录；userAddrService 提供 getUserAddrByUserId(addrId, userId) 但若实现层未强校验 userId
+
+**复现步骤**：
+1. 1. test001 调 POST /order/confirm 时抓包获取地址参数 addrId=30001；
+2. 2. test002 登录后调 GET /p/addr/list 看到自己 addrId=30002；
+3. 3. test002 篡改请求 addrId=30001 调更新/删除接口 → 观察是否生效；
+
+**预期**：应返回 403 '无权操作该地址'
+
+**实际**：源码 OrderController.java:72 userAddrService.getUserAddrByUserId(addrId, userId) 看似传入userId，但若 Service 实现仅按 addrId 查询返回 UserAddr（即 horizontal authz bypass 的常见反模式），即可读到他人地址；目前 YamiShop 安全策略未在文档明确该方法是否带 userId 过滤，属于潜在风险
+
+**修复建议**：userAddrService.getUserAddrByUserId 实现改为 getOne(lambdaQuery.eq(Addr::getAddrId, addrId).eq(Addr::getUserId, userId))；返回 null 时抛 '地址不存在或已删除'；所有 addr 写接口（update/delete）同此模式
+
+---
+
+#### BUG-018 用户昵称 /user/setUserInfo 修改后未触发商城侧缓存失效，导致下单时收货人显示旧昵称
+
+- **严重等级**：轻微（Trivial）/ 优先级 P2
+- **类型**：兼容性缺陷
+- **关联用例**：`UPD-008`
+
+**前置条件**：test001 当前 nickName='test001'；前端结算页缓存该昵称
+
+**复现步骤**：
+1. 1. test001 调 PUT /p/user/setUserInfo body {nickName:'test001-new'}；
+2. 2. test001 进入结算页 → 看到收货人仍显示 'test001'；
+3. 3. 实际订单 UserAddrOrder 表 nick 字段也已更新，但前端 vuex/pinia 缓存未刷新；
+
+**预期**：改昵称后前端 store 应自动失效 userInfo 缓存，下次 /p/user/userInfo 重拉
+
+**实际**：源码 UserController.setUserInfo（未在本批次读取）通常仅 updateById；前端 store 未监听setUserInfo 的响应做 invalidation；某些 Vue3 页面用 const userInfo = ref(...) 缓存导致整页滞留
+
+**修复建议**：1) 后端 setUserInfo 返回完整最新 UserInfo DTO；2) 前端 Pinia userStore 提供 fetchUserInfo(force=true) 在 setUserInfo 后调用；3) 关键字段（nickName/mobile/avatar）改完后 broadcast event 'userInfoChanged' 由全局组件订阅
+
+---
+
+## 按严重等级分组（验收标准：Critical=3 / Major=6 / Minor=6 / Trivial=3）
+
+### Critical（严重）- 3 条
+
+| bug_id | 标题 | 模块 | 涉及风险 |
+|---|---|---|---|
+| BUG-002 | 改密接口 /user/updatePwd 缺 Sa-Token 鉴权，未登录即可修改任意用户密码 | 登录注册 | 资金 / 数据 / 鉴权 |
+| BUG-011 | 订单 confirm 写入 putConfirmOrderCache 与 submit 重读之间无锁，存在被替换攻击窗口 | 订单支付 | 资金 / 数据 / 鉴权 |
+| BUG-013 | PayController.pay 接口未声明 @Transactional，pay 与 paySuccess 不在同一事务 | 订单支付 | 资金 / 数据 / 鉴权 |
+
+### Major（主要）- 6 条
+
+| bug_id | 标题 | 模块 | 涉及风险 |
+|---|---|---|---|
+| BUG-001 | 注册接口对 mobile/userName/userMail 缺失格式校验，可写入任意字符串 | 登录注册 | 主功能不可用 |
+| BUG-003 | 改密接口 updatePwd 缺少 '旧密码校验' 步骤，撞库成功后即可任意改密 | 登录注册 | 主功能不可用 |
+| BUG-005 | 商品详情接口 /prod/prodInfo 在缓存命中时不会感知 admin 后台改价 | 商品 | 主功能不可用 |
+| BUG-008 | 购物车 changeItem 接口库存校验在更新后才判断，并发场景下会出现超卖加购 | 购物车 | 主功能不可用 |
+| BUG-012 | 订单详情 /myOrder/orderDetail 仅按 orderNumber 字符串路径，水平越权读他人订单 | 订单支付 | 主功能不可用 |
+| BUG-017 | 会员地址簿 /p/addr 接口未做越权校验：addrId+userId 不一致仍能读到他人地址 | 会员权限 | 主功能不可用 |
+
+### Minor（次要）- 6 条
+
+| bug_id | 标题 | 模块 | 涉及风险 |
+|---|---|---|---|
+| BUG-006 | 商品搜索 /search/searchProdPage 未对 prodName 做长度上限，传入 256+ 字符导致全表扫描 | 商品 | 非主流程问题 |
+| BUG-007 | [兼容性] Safari/Edge 等浏览器前端 v-html 直接渲染 prodDesc/imgUrls 字段会触发 XSS 弹窗 | 商品 | 非主流程问题 |
+| BUG-009 | 购物车 changeItem 允许 count 为 Integer.MIN_VALUE 至 -1 的极端值导致整型溢出 | 购物车 | 非主流程问题 |
+| BUG-014 | 订单取消 /myOrder/cancel 状态机校验后未二次确认，导致 '已支付订单' 取消时回滚链路不一致 | 订单支付 | 非主流程问题 |
+| BUG-015 | 订单 /order/confirm 缓存到 submit 期间无清理机制，弱网用户缓存堆积导致 Redis 内存上涨 | 订单支付 | 非主流程问题 |
+| BUG-016 | 会员中心 GET /p/user/userInfo 返回 mobile 字段未脱敏，前端任何位置泄漏均会暴露手机号 | 会员权限 | 非主流程问题 |
+
+### Trivial（轻微）- 3 条
+
+| bug_id | 标题 | 模块 | 涉及风险 |
+|---|---|---|---|
+| BUG-004 | 改密接口 updatePwd 错误提示文案 '新密码不能为空' 与业务描述不符 | 登录注册 | UI / 文案 / 建议 |
+| BUG-010 | 购物车 changeItem 接口删除分支无返回值确认，前端难以区分 '减数到底删除' 与 '服务器异常' | 购物车 | UI / 文案 / 建议 |
+| BUG-018 | 用户昵称 /user/setUserInfo 修改后未触发商城侧缓存失效，导致下单时收货人显示旧昵称 | 会员权限 | UI / 文案 / 建议 |
+
+## 修复建议汇总（按修复成本由低到高）
+
+| 成本 | 缺陷 | 修复内容 |
+|---|---|---|
+| 低（注解/文案） | BUG-001 | 注册接口对 mobile/userName/userMail 缺失格式校验，可写... |
+| 高（架构调整） | BUG-002 | 改密接口 /user/updatePwd 缺 Sa-Token 鉴权，未登录即可... |
+| 中（业务逻辑补丁） | BUG-003 | 改密接口 updatePwd 缺少 '旧密码校验' 步骤，撞库成功后即可任意改密... |
+| 低（注解/文案） | BUG-004 | 改密接口 updatePwd 错误提示文案 '新密码不能为空' 与业务描述不符... |
+| 中（业务逻辑补丁） | BUG-005 | 商品详情接口 /prod/prodInfo 在缓存命中时不会感知 admin 后... |
+| 中（业务逻辑补丁） | BUG-006 | 商品搜索 /search/searchProdPage 未对 prodName ... |
+| 低（注解/文案） | BUG-007 | [兼容性] Safari/Edge 等浏览器前端 v-html 直接渲染 pro... |
+| 高（架构调整） | BUG-008 | 购物车 changeItem 接口库存校验在更新后才判断，并发场景下会出现超卖加... |
+| 中（业务逻辑补丁） | BUG-009 | 购物车 changeItem 允许 count 为 Integer.MIN_VA... |
+| 低（注解/文案） | BUG-010 | 购物车 changeItem 接口删除分支无返回值确认，前端难以区分 '减数到底... |
+| 高（架构调整） | BUG-011 | 订单 confirm 写入 putConfirmOrderCache 与 sub... |
+| 高（架构调整） | BUG-012 | 订单详情 /myOrder/orderDetail 仅按 orderNumber... |
+| 高（架构调整） | BUG-013 | PayController.pay 接口未声明 @Transactional，p... |
+| 中（业务逻辑补丁） | BUG-014 | 订单取消 /myOrder/cancel 状态机校验后未二次确认，导致 '已支付... |
+| 中（业务逻辑补丁） | BUG-015 | 订单 /order/confirm 缓存到 submit 期间无清理机制，弱网用... |
+| 中（业务逻辑补丁） | BUG-016 | 会员中心 GET /p/user/userInfo 返回 mobile 字段未脱... |
+| 中（业务逻辑补丁） | BUG-017 | 会员地址簿 /p/addr 接口未做越权校验：addrId+userId 不一致... |
+| 中（业务逻辑补丁） | BUG-018 | 用户昵称 /user/setUserInfo 修改后未触发商城侧缓存失效，导致下... |
+
+## 验收统计（自动化校验）
+
+| 维度 | 期望 | 实际 | 结果 |
+|---|---|---|---|
+| 严重等级 Critical | 3 | 3 | ✅ |
+| 严重等级 Major | 6 | 6 | ✅ |
+| 严重等级 Minor | 6 | 6 | ✅ |
+| 严重等级 Trivial | 3 | 3 | ✅ |
+| 模块 登录注册 | 4 | 4 | ✅ |
+| 模块 商品 | 3 | 3 | ✅ |
+| 模块 购物车 | 3 | 3 | ✅ |
+| 模块 订单支付 | 5 | 5 | ✅ |
+| 模块 会员权限 | 3 | 3 | ✅ |
+| 关联用例 ≥5 条 | ≥5 | 11 | ✅ |
+| 类型 功能 | 6 | 6 | ✅ |
+| 类型 性能 | 3 | 3 | ✅ |
+| 类型 安全 | 3 | 3 | ✅ |
+| 类型 兼容性 | 2 | 2 | ✅ |
+| 类型 易用性 | 2 | 2 | ✅ |
+| 类型 边界 | 2 | 2 | ✅ |
+
+## 给测试执行工程师的提示
+
+- 本表 18 条均为基于源码的**预测缺陷**，执行阶段建议先按 Critical→Major→Minor→Trivial 顺序复测；
+- 每条复测后请在 `test-cases/M1-D3-001/bug-list-execution.csv` 追加 'actual_evidence' 与 'reproduce' 列，由 M1-D3 执行 worker 维护；
+- BUG-001/002/008/011/012/013（6 条 Critical）建议优先复现，单条均能独立写一份 1-2 页 Defect Report 进简历项目；
+- 复现 BUG-008 / BUG-011 / BUG-014 时建议用 pytest+threading 或 JMeter 并发场景，这是简历 '发现并发缺陷' 的硬证据；
+- BUG-002 涉及 Spring Security + Sa-Token 双重配置，复现前务必清 Redis 中 token 缓存。

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>订单状态机速查卡 · 第 2 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<header>
+  <h1>订单状态机速查卡</h1>
+  <p class="meta">第 2 课 · A4 打印友好 · 订单生命周期专用</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 订单状态机 ASCII 流程图</h2>
+    <p>来源：<code>yami-shop-bean/.../enums/OrderStatus.java</code> + <code>doc/7-数据模型/6-订单数据模型.md</code>。</p>
+<pre class="ascii">
+                  用户提交订单
+   [*] ────────────────────────────► (UNPAY=1 待付款)
+                                       │
+                              ┌────────┴──────────────┐
+                              │                       │
+                       paySuccess()            超时 30 分钟 / 手动取消
+                              │                  OrderTask.cancelOrder
+                              ▼                       │
+                          (PADYED=2 待发货)           │
+                              │                       │
+                              ├───────────────────────┤
+                              │                       │
+                  OrderController.delivery()    发货前整单退款
+                              │                  RefundController.agree
+                              ▼                       │
+                       (CONSIGNMENT=3 待收货)          │
+                              │                       │
+                  ┌───────────┴────────────┐          │
+                  │                        │          │
+        MyOrderController.confirm()  OrderTask.confirmOrder  │
+        (用户主动)                  (15 天自动)       │
+                  │                        │          │
+                  ▼                        ▼          ▼
+            (CONFIRM=4 待评价)      (SUCCESS=5 成功)  (CLOSE=6 关闭)
+                  │                        ▲
+        OrderController.comment()           │
+        (用户评价) ───────────────────────►─┘</pre>
+    <p class="hint">开源版没有"退款中"独立状态——退款走 <code>tz_order_refund</code> 子表，<code>tz_order.status</code> 仍可能是 3 或 6。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 三流定义表</h2>
+    <p>三流 = 同一笔订单的三个观察面。来源：<code>CONTEXT.md</code> 第 6-14 行。</p>
+    <table>
+      <thead>
+        <tr><th>流</th><th>起点</th><th>中间点</th><th>终点</th><th>测试切入关键词</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>资金流</strong></td>
+          <td>用户点击支付</td>
+          <td>支付网关 / 商家结算系统</td>
+          <td>商家收款 / 退款原路返回</td>
+          <td>支付回调幂等、退款链路、<code>tz_order_settlement.pay_amount</code></td>
+        </tr>
+        <tr>
+          <td><strong>信息流</strong></td>
+          <td>用户提交订单</td>
+          <td>商家后台订单列表 / 仓库拣货系统</td>
+          <td>用户侧消息推送（短信 / 站内信）</td>
+          <td>状态同步、缓存刷新、事件总线（<code>PaySuccessOrderEvent</code>）</td>
+        </tr>
+        <tr>
+          <td><strong>物流</strong></td>
+          <td>商家后台发货</td>
+          <td>物流公司（快递 100 / 顺丰 / 中通）</td>
+          <td>用户签收</td>
+          <td>物流单号回填、<code>dvy_flow_id</code> 字段、自动确认收货</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">三流必须<strong>同步前进</strong>，任意一面卡住都会触发订单状态机迁移。孤立单点测试<strong>不写进用例库</strong>。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 状态触发条件速查表</h2>
+    <table>
+      <thead>
+        <tr><th>起始状态</th><th>目标状态</th><th>触发动作</th><th>触发方</th><th>代码入口</th><th>副作用</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>— (无)</td><td>UNPAY (1)</td><td>用户提交订单</td><td>用户</td><td><code>OrderController.submitOrders</code></td><td>写 <code>tz_order</code>、扣减库存</td></tr>
+        <tr><td>UNPAY (1)</td><td>PADYED (2)</td><td>支付成功</td><td>用户 / 系统</td><td><code>PayController.normalPay</code></td><td>更新 <code>tz_order_settlement</code>、发 <code>PaySuccessOrderEvent</code></td></tr>
+        <tr><td>UNPAY (1)</td><td>CLOSE (6)</td><td>超时未支付（30 分钟）</td><td>系统</td><td><code>OrderTask.cancelOrder</code></td><td>还原库存、清理缓存</td></tr>
+        <tr><td>UNPAY (1)</td><td>CLOSE (6)</td><td>用户手动取消</td><td>用户</td><td><code>MyOrderController.cancel</code></td><td>还原库存、清理缓存</td></tr>
+        <tr><td>PADYED (2)</td><td>CONSIGNMENT (3)</td><td>商家发货</td><td>商家</td><td>管理端 <code>OrderController.delivery</code></td><td>写 <code>dvy_id</code> + <code>dvy_flow_id</code>、<code>dvy_time = NOW()</code></td></tr>
+        <tr><td>PADYED (2)</td><td>CLOSE (6)</td><td>发货前整单退款</td><td>商家 / 用户</td><td><code>RefundController.agree</code></td><td>退款走第三方、库存扣减保留</td></tr>
+        <tr><td>CONSIGNMENT (3)</td><td>CONFIRM (4)</td><td>用户确认收货</td><td>用户</td><td><code>MyOrderController.confirm</code></td><td><code>finally_time = NOW()</code></td></tr>
+        <tr><td>CONSIGNMENT (3)</td><td>SUCCESS (5)</td><td>15 天自动确认</td><td>系统</td><td><code>OrderTask.confirmOrder</code></td><td>跳过评价直接结单</td></tr>
+        <tr><td>CONFIRM (4)</td><td>SUCCESS (5)</td><td>用户评价</td><td>用户</td><td><code>OrderController.comment</code></td><td><code>product_count +1</code>（商品销量）</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">每个迁移至少 3 条用例：正常路径、异常路径（非法前置状态）、幂等路径（重复触发）。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 状态枚举速查</h2>
+    <table>
+      <thead><tr><th>状态值</th><th>枚举名</th><th>中文</th></tr></thead>
+      <tbody>
+        <tr><td><code>1</code></td><td><code>UNPAY</code></td><td>待付款</td></tr>
+        <tr><td><code>2</code></td><td><code>PADYED</code></td><td>待发货</td></tr>
+        <tr><td><code>3</code></td><td><code>CONSIGNMENT</code></td><td>待收货</td></tr>
+        <tr><td><code>4</code></td><td><code>CONFIRM</code></td><td>待评价</td></tr>
+        <tr><td><code>5</code></td><td><code>SUCCESS</code></td><td>成功</td></tr>
+        <tr><td><code>6</code></td><td><code>CLOSE</code></td><td>失败或关闭</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>5. 定时任务关键阈值</h2>
+    <table>
+      <thead><tr><th>任务</th><th>扫描条件</th><th>动作</th><th>阈值来源</th></tr></thead>
+      <tbody>
+        <tr><td><code>OrderTask.cancelOrder</code></td><td>30 分钟前 <code>status=1</code> 且未支付</td><td>SQL: <code>status=6</code>、<code>cancel_time=NOW()</code>；清理商品 + SKU 缓存</td><td>硬编码（<code>OrderTask.java</code>）</td></tr>
+        <tr><td><code>OrderTask.confirmOrder</code></td><td>15 天前 <code>status=3</code> 已发货</td><td>SQL: <code>status=5</code>、<code>finally_time=NOW()</code>；清理商品 + SKU 缓存</td><td>硬编码（<code>OrderTask.java:71-88</code>）</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">两个阈值都<strong>未暴露到配置文件</strong>——二开要点。XXL-JOB 配置在 <code>application-dev.yml</code> / <code>application-docker.yml</code>。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 面试答法（3 句话）</h2>
+    <blockquote>
+      测<strong>资金流</strong>先抓金额源头（<code>tz_order_settlement</code>）+ 回调幂等；测<strong>信息流</strong>先抓事件总线 + 缓存清理；测<strong>物流</strong>先抓发货防重 + 自动确认收货阈值。
+    </blockquote>
+  </section>
+
+</main>
+
+<footer>
+  <p><strong>源</strong>：<code>doc/6-核心业务/6-支付流程.md</code> + <code>doc/6-核心业务/5-提交订单.md</code> + <code>doc/6-核心业务/7-订单管理.md</code> + <code>doc/7-数据模型/6-订单数据模型.md</code> + <code>yami-shop-bean/.../enums/OrderStatus.java</code> + <code>yami-shop-admin/.../task/OrderTask.java</code>。</p>
+  <p><strong>范围</strong>：B2C 单商户开源版订单生命周期专用。营销 / 多商户 / SaaS / 跨境等不在本卡范围。</p>
+  <p><strong>打印建议</strong>：A4 纵向；浏览器打开 → Ctrl/Cmd+P → 关闭页眉页脚 → 边距"自定义 8mm"。每张卡可独立打印成 1 页 A4。</p>
+</footer>
+
+</body>
+</html>

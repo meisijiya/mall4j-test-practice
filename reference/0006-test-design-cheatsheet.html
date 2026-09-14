@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>150 条用例拆解速查卡 · 第 6 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<header>
+  <h1>150 条用例拆解速查卡</h1>
+  <p class="meta">第 6 课 · A4 打印友好 · M1-D2 + D3 用例拆解专用</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 五大方法速查表（精简版）</h2>
+    <p>来源：第 4 课 + <code>ISTQB CTFL Syllabus v4.0</code>。</p>
+    <table>
+      <thead><tr><th>#</th><th>方法</th><th>核心思想</th><th>D2/D3 案例</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>等价类划分</td><td>切输入域，每类 1 代表</td><td>登录用户名 4-20 字符 / 订单 6 状态枚举</td></tr>
+        <tr><td>2</td><td>边界值分析</td><td>上点 / 离点 / 内点三点</td><td>分页 size=0/99999 / 金额 0/0.01 / 库存 0/1</td></tr>
+        <tr><td>3</td><td>场景法</td><td>基本流 + 备选流</td><td>加购→下单→支付 8 条主链路 + 5 备选流</td></tr>
+        <tr><td>4</td><td>状态迁移</td><td>前置 → 触发 → 迁移</td><td>订单 6 状态 × 3 路径 = 18 条</td></tr>
+        <tr><td>5</td><td>正交实验</td><td>Lₙ(m^k) 降维</td><td>角色 × 菜单 × 权限 L₉(3³)</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">五种方法不是并列清单，而是"输入 → 流程 → 组合"的递进。一份完整的测试方案至少 2 种方法叠加。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. CONTEXT.md §3 可测点速查</h2>
+    <p>来源：<code>D:/26测试/mall4j/CONTEXT.md</code> §3（领域语言速查）。</p>
+    <table>
+      <thead><tr><th>可测点</th><th>对应 D3 用例</th><th>行数</th></tr></thead>
+      <tbody>
+        <tr><td>幂等性（订单 / 支付 / 退款）</td><td>ORDER-015 / 016 / 017</td><td>3</td></tr>
+        <tr><td>分布式锁（库存超卖）</td><td>ORDER-018 / 019</td><td>2</td></tr>
+        <tr><td>鉴权链（401 / 403 / token 过期）</td><td>ORDER-020 / 021 / 022 / MEMBER-005 / PERM-001</td><td>5</td></tr>
+        <tr><td>参数校验（@NotNull / @NotBlank）</td><td>ORDER-023 / 024 / ADDR-008</td><td>3</td></tr>
+        <tr><td>SQL 注入 / XSS 防护</td><td>ORDER-025 / MEMBER-004 / COMPAT-012 / 013</td><td>4</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">CONTEXT §3 列出的 5 大可测点全部映射到 D3 用例——M1 阶段测试设计完整覆盖。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 150 条用例分布表（D2 + D3 实测统计）</h2>
+    <p>实测数据（Python <code>csv.DictReader</code> + <code>collections.Counter</code>）：</p>
+
+    <h3>3.1 按模块 ID 前缀（11 个模块）</h3>
+    <table>
+      <thead><tr><th>模块</th><th>用例数</th><th>占比</th></tr></thead>
+      <tbody>
+        <tr><td>PROD 商品</td><td>30</td><td>20.0%</td></tr>
+        <tr><td>ORDER 订单</td><td>25</td><td>16.7%</td></tr>
+        <tr><td>CART 购物车</td><td>20</td><td>13.3%</td></tr>
+        <tr><td>COMPAT 兼容性</td><td>20</td><td>13.3%</td></tr>
+        <tr><td>REG 注册</td><td>12</td><td>8.0%</td></tr>
+        <tr><td>UPD 改密</td><td>10</td><td>6.7%</td></tr>
+        <tr><td>SMS 短信</td><td>10</td><td>6.7%</td></tr>
+        <tr><td>LOGIN 登录</td><td>8</td><td>5.3%</td></tr>
+        <tr><td>ADDR 地址</td><td>8</td><td>5.3%</td></tr>
+        <tr><td>MEMBER 会员</td><td>5</td><td>3.3%</td></tr>
+        <tr><td>PERM 权限</td><td>2</td><td>1.3%</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>150</strong></td><td><strong>100%</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 按设计方法</h3>
+    <pre><code>scenario 87 (58.0%) | boundary 41 (27.3%) | compatibility 12 (8.0%) | security 8 (5.3%) | concurrency 2 (1.3%) = 150</code></pre>
+
+    <h3>3.3 按优先级</h3>
+    <pre><code>P0 67 (45%) | P1 63 (42%) | P2 20 (13%) = 150</code></pre>
+
+    <h3>3.4 按 HTTP 方法</h3>
+    <pre><code>POST 69 | GET 47 | PUT 21 | DELETE 7 | MIXED 6 = 150</code></pre>
+
+    <p class="hint">三层分布：方法 58% + 边界 27% = 85% 字段 + 流程；异常 14% 兜底；P0 45% 主导上线门禁。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. P0 / P1 / P2 优先级判定规则</h2>
+    <table>
+      <thead><tr><th>优先级</th><th>判定标准</th><th>D2 案例</th><th>D3 案例</th><th>上线门禁</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>P0 核心交易</strong></td>
+          <td>用户主链路必经；不可降级</td>
+          <td>LOGIN-001 正常登录</td>
+          <td>ORDER-003 支付成功</td>
+          <td>100% 通过；阻塞上线</td>
+        </tr>
+        <tr>
+          <td><strong>P1 重要流程</strong></td>
+          <td>辅助功能或异常路径；可临时绕过</td>
+          <td>PROD-008 下架商品过滤</td>
+          <td>ORDER-016 重复 pay 幂等</td>
+          <td>应通过；阻塞项修复</td>
+        </tr>
+        <tr>
+          <td><strong>P2 边界 / 异常</strong></td>
+          <td>边界值 / 兼容性 / 弱网；非阻塞</td>
+          <td>PROD-005 size=99999</td>
+          <td>COMPAT-007 弱网 3G</td>
+          <td>选做；记录问题</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">D2 P0 47 / P1 38 / P2 5（重主链路）；D3 P0 20 / P1 25 / P2 15（重兼容与异常）——两阶段方法论倾向不同。</p>
+  </section>
+
+  <section class="card">
+    <h2>5. 用例评审 10 条 Checklist</h2>
+    <ol>
+      <li><strong>覆盖完整性</strong>：每个需求点 ≥ 1 条用例；每条对应 ≥ 1 种方法</li>
+      <li><strong>边界就位</strong>：每个数值字段都有上点 / 离点 / 内点</li>
+      <li><strong>异常路径</strong>：每个基本流配 2-3 条备选流（异常 / 取消 / 超时）</li>
+      <li><strong>幂等覆盖</strong>：支付 / 提交 / 确认收货 ≥ 1 条重复触发用例</li>
+      <li><strong>状态机完整</strong>：每迁移有正常 / 异常前置 / 幂等 3 条</li>
+      <li><strong>可执行性</strong>：前置条件 / 测试数据 / 预期结果三件套齐全</li>
+      <li><strong>数据驱动</strong>：同类用例用 YAML / Excel 参数化</li>
+      <li><strong>优先级</strong>：P0 / P1 / P2 三级，P0 必 100% 通过</li>
+      <li><strong>可追溯</strong>：每条用例标注来源需求 / 文档章节</li>
+      <li><strong>评审结论</strong>：通过 / 有条件通过 / 不通过 三档</li>
+    </ol>
+    <p class="hint">150 条用例 × 10 维度 = 1500 检查点；半天跑完一轮评审。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 订单状态机（Mermaid）</h2>
+    <pre><code>stateDiagram-v2
+  [*] --> UNPAY: 下单
+  UNPAY --> PADYED: 支付成功
+  UNPAY --> CLOSE: 超时 30min / 用户取消
+  PADYED --> CONSIGNMENT: 商家发货
+  PADYED --> CLOSE: 退款(强制)
+  PADYED --> REFUND: 申请退款
+  CONSIGNMENT --> CONFIRM: 用户收货
+  CONSIGNMENT --> REFUND: 申请退款
+  CONFIRM --> SUCCESS: 评价完成
+  REFUND --> [*]: 退款成功
+  CLOSE --> [*]
+  SUCCESS --> [*]</code></pre>
+    <p class="hint">6 状态 + 9 迁移 = 27 条标称用例（每迁移 3 路径）；D3 实测 11 条状态机 + 6 条幂等 = 17 条相关用例。</p>
+  </section>
+
+</main>
+
+<footer>
+  <p><strong>源</strong>：<code>test-cases/M1-D2-001/M1-D2-001-testcases.csv</code> + <code>test-cases/M1-D3-001/M1-D3-001-testcases.csv</code> + <code>CONTEXT.md</code> §3 + 第 4 课 / 第 5 课。</p>
+  <p><strong>范围</strong>：B2C 单商户开源版 M1 阶段用例拆解专用。营销 / 多商户 / SaaS / 跨境等不在本卡范围。</p>
+  <p><strong>打印建议</strong>：A4 纵向；浏览器打开 → Ctrl/Cmd+P → 关闭页眉页脚 → 边距"自定义 8mm"。每张卡可独立打印成 1 页 A4。</p>
+</footer>
+
+</body>
+</html>

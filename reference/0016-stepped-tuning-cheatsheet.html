@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>M3-D11 阶梯压测 + 调优速查卡 · mall4j 12/12 收官</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    @page { size: A4; margin: 1.5cm; }
+    body { font-size: 10pt; line-height: 1.4; max-width: 18cm; margin: 0 auto; padding: 1cm; }
+    .card { border: 1px solid #ddd; padding: 0.6em 0.8em; margin-bottom: 0.8em; border-radius: 4px; background: #fafafa; }
+    .card h3 { margin: 0 0 0.3em; font-size: 12pt; color: #2c3e50; }
+    .card p, .card ul, .card ol { margin: 0.3em 0; font-size: 9.5pt; }
+    .card ul, .card ol { padding-left: 1.5em; }
+    .card li { margin: 0.15em 0; }
+    .card code { background: #ecf0f1; padding: 1px 4px; border-radius: 2px; font-size: 9pt; }
+    .card pre { background: #2c3e50; color: #ecf0f1; padding: 0.5em; border-radius: 3px; overflow-x: auto; font-size: 8.5pt; }
+    .card pre code { background: transparent; padding: 0; color: inherit; font-size: inherit; }
+    h1 { font-size: 18pt; border-bottom: 2px solid #2c3e50; padding-bottom: 0.3em; }
+    h2 { font-size: 13pt; color: #34495e; margin-top: 1em; margin-bottom: 0.5em; }
+    footer { margin-top: 1.5em; padding-top: 0.5em; border-top: 1px solid #ddd; font-size: 9pt; }
+    .badge { display: inline-block; background: #27ae60; color: white; padding: 2px 8px; border-radius: 3px; font-size: 9pt; margin-left: 0.5em; }
+    @media print {
+      .card { break-inside: avoid; page-break-inside: avoid; }
+      h2 { break-after: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>M3-D11-001 阶梯压测 + 调优速查卡 <span class="badge">12/12 收官</span></h1>
+  <p class="meta">mall4j · AGPLv3 边界 100% 守 · 适用 M3-D11-001 + 简历可写"参与性能调优复测"</p>
+
+  <h2>§1 3 场景脚本</h2>
+  <div class="card">
+    <h3>login / query / order × 4 阶梯 × 2 轮</h3>
+    <ul>
+      <li><strong>login</strong>：HttpUser + on_start adminLogin + 3 @task view_prod_list 60% / detail 30% / my_info 10%</li>
+      <li><strong>query</strong>：HttpUser 不登录 + 3 @task view_prod_list 50% / detail 30% / search_by_tag 20%</li>
+      <li><strong>order</strong>：HttpUser + on_start adminLogin + 3 @task order_list 40% / order_detail 30% / cart_list 30%</li>
+      <li><strong>合计</strong>：3 场景 × 4 阶梯 × 2 轮 = <strong>24 个 locust 实例</strong></li>
+    </ul>
+  </div>
+
+  <h2>§2 4 阶梯设计</h2>
+  <div class="card">
+    <h3>50 / 100 / 200 / 500 × 60s + 间隔 30s</h3>
+    <ul>
+      <li><strong>50u</strong>：基线（无压力）</li>
+      <li><strong>100u</strong>：D10 单点压测（参考线）</li>
+      <li><strong>200u</strong>：2 倍 D10（找拐点）</li>
+      <li><strong>500u</strong>：极限（单实例 Spring Boot 容易 OOM）</li>
+    </ul>
+    <p><strong>间隔 30s 不是闲等</strong>：JVM 缓存预热（HikariCP min-idle→maximum-pool-size ~10s）+ GC 触底（堆内存回落 ~5s）+ HikariCP 回收（超时连接 ~15s）</p>
+  </div>
+
+  <h2>§3 调优决策树</h2>
+  <div class="card">
+    <h3>TPS 不涨反降 / P99 &gt; 2000ms 时怎么查？</h3>
+    <pre><code>1. CPU 100%?
+   ├─ Yes → jstack 看线程 dump 有 BLOCKED?
+   │       ├─ Yes → 锁竞争（❌ 改 Java 违反 AGPLv3）
+   │       └─ No  → 线程池 200→400 ✅
+   └─ No  → 内存 80%?
+           ├─ Yes → GC 频繁?
+           │       ├─ Yes → -Xmx1g + G1GC ✅
+           │       └─ No  → 内存泄漏（❌ 改 Java 违反 AGPLv3）
+           └─ No  → DB 连接池满?
+                   ├─ Yes → HikariCP 10→30 ✅
+                   └─ No  → Redis 连接池满?
+                           ├─ Yes → Lettuce 6→20 ✅
+                           └─ No  → 业务逻辑（❌ 改 Java 违反 AGPLv3）</code></pre>
+  </div>
+
+  <h2>§4 tuning-config.properties 关键 3 段</h2>
+  <div class="card">
+    <h3>AGPLv3 不动 Java，调优全走 .properties</h3>
+    <pre><code># 1. Tomcat 线程池（默认 200 → 400）
+server.tomcat.threads.max=400
+server.tomcat.threads.min-spare=50
+server.tomcat.max-connections=10000
+
+# 2. HikariCP 连接池（默认 10 → 30）
+spring.datasource.hikari.maximum-pool-size=30
+spring.datasource.hikari.minimum-idle=10
+spring.datasource.hikari.connection-timeout=30000
+
+# 3. Lettuce Redis 池（默认 6 → 20）
+spring.redis.lettuce.pool.max-active=20
+spring.redis.lettuce.pool.max-idle=10</code></pre>
+  </div>
+
+  <h2>§5 tuning-jvm.sh 应用方式</h2>
+  <div class="card">
+    <h3>pkill + java -Xmx1g + G1GC + .properties</h3>
+    <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+pkill -f "yami-shop-api.*\.jar" || echo "ℹ️ 无旧 java"
+
+java -jar yami-shop-api/target/yami-shop-api-0.0.1-SNAPSHOT.jar \
+    --spring.profiles.active=dev \
+    --spring.config.additional-location=file:./tuning-config.properties \
+    -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+    > api.log 2>&1 &
+
+echo "✅ 调优后 API 启动"
+sleep 30
+curl -s http://127.0.0.1:8086/doc.html > /dev/null && echo "✅ ready"</code></pre>
+  </div>
+
+  <h2>§6 run-stepped.sh 调度</h2>
+  <div class="card">
+    <h3>4 阶梯 × 3 场景 × 2 轮 = 24 跑次</h3>
+    <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+export GEVENT_BACKEND=select
+
+STEPS="${STEPS:-50 100 200 500}"
+INTERVAL="${INTERVAL:-30}"
+
+# 调优前
+for USERS in $STEPS; do
+    for SCENARIO in login query order; do
+        locust -f "locustfile_${SCENARIO}.py" \
+            --users $USERS --spawn-rate 10 --run-time 60s \
+            --headless --only-summary \
+            --html reports/before/L$((USERS/50))-${SCENARIO}-report.html \
+            --csv  reports/before/L$((USERS/50))-${SCENARIO}-stats
+        sleep $INTERVAL
+    done
+done
+
+# 调优重启
+bash tuning-jvm.sh && sleep 60
+
+# 调优后（同样 24 跑次输出到 reports/after/）
+# ... 同上
+
+python generate-stepped-report.py   # → reports/stepped-comparison.md</code></pre>
+  </div>
+
+  <h2>§7 mall4j 12/12 收官 + 简历可写</h2>
+  <div class="card">
+    <h3>5 阶段汇总</h3>
+    <ul>
+      <li><strong>HARNESS-001</strong>：5 子系统骨架（AGENTS/CONTEXT/feature_list/progress/init/handoff）</li>
+      <li><strong>M1-D1~5</strong>：环境 + 150 用例 + 18 缺陷 + Postman 40 用例 65 PASS</li>
+      <li><strong>M2-D6~9</strong>：pytest 90 用例 + POM 7 类 + UI 路径 2 + CI 工作流</li>
+      <li><strong>M3-D10/11</strong>：Locust 单点 + 阶梯调优（24 个 locust 实例 + 调优决策树）</li>
+      <li><strong>教学</strong>：16 课 + 14 cheatsheet + 15 learning-records</li>
+    </ul>
+    <p><strong>简历可写数字</strong>（×2 原则）：</p>
+    <ul>
+      <li>"设计 4 阶梯 Locust 压测（50/100/200/500）+ 3 场景 × 2 轮 = 24 跑次"</li>
+      <li>"实测 Tomcat 线程池 200→400 + HikariCP 10→30 + Lettuce 6→20 三池调优"</li>
+      <li>"AGPLv3 不动 Java；调优全走 .properties + JVM 参数"</li>
+    </ul>
+    <p><strong>关键路径</strong>：<code>test-cases/perf/stepped/run-stepped.sh</code> · <code>tuning-config.properties</code> · <code>tuning-jvm.sh</code> · <code>doc/4-技术实现/M3-D11-001-impl-notes.md</code></p>
+  </div>
+
+  <footer>
+    <p>第 16 课配套速查卡 · <a href="../lessons/0016-stepped-stress-tuning.html">返回主课</a></p>
+    <p class="meta">mall4j M3-D11-001 · 2026-09-14 · 12/12 features done</p>
+  </footer>
+</body>
+</html>

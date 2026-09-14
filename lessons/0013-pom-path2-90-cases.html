@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 13 课 POM 完整化 + UI 路径 2 captcha mock + 90 用例</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 13 课：POM 完整化 + UI 路径 2 captcha mock + 90 用例</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 13 课</span>
+    <span class="tag">难度 ★★★★★</span>
+    <span class="tag">时长 55 分钟</span>
+    <span class="tag">实战对象 M2-D8-001 POM 7 类 + 路径 2 captcha mock + 接口补全至 85 用例</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L12 → L13：49 → 90 用例 + 7 Page 类 + 路径 2）</a></li>
+      <li><a href="#sec2">为什么测试工程师必须懂 POM 完整化 + UI 路径 2</a></li>
+      <li><a href="#sec3">39 件产物速览：12 yaml + 12 API wrapper + 7 testcases + 7 Page 类 + 2 mock 静态方法</a></li>
+      <li><a href="#sec4">核心概念 × 5（POM 7 类 / 路径 2 mock / 双 selectors / allure severity 5 helper / 49 → 85 用例）</a></li>
+      <li><a href="#sec5">动手练：5 分钟 pytest --collect-only 验证 90 用例</a></li>
+      <li><a href="#sec6">课堂小测 + 收官提示</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L12 → L13：49 → 90 用例 + 7 Page 类 + 路径 2）</h2>
+  <p>第 12 课把 10 条接口用例资产化到 47 条 YAML 数据驱动 + 2 条 Playwright UI 用例（28 文件 / 54 collected）——<strong>起步版</strong>。本课在 L12 的基础上做"<strong>POM 完整化 + UI 路径 2 captcha mock + 接口补全</strong>"：49 用例扩展到 <strong>85 用例</strong>，再加 <strong>7 个 Page 类</strong>（BasePage 下的 LoginPage / HomePage / ProdListPage / ProdDetailPage / CartPage / OrderPage / UserPage）和 2 个 mock 静态方法，把"路径 1 绕滑块"升级到"<strong>路径 2 真实填表单 + mock captcha + mock login</strong>"。</p>
+  <ul>
+    <li><strong>第 12 课（M2-D7-001 YAML + UI 起步）</strong>：28 文件 / 47 yaml case + 2 UI 用例 / 5 yaml / 1 BasePage / 探针机制 / SafeDict / 业务码 String 修复。</li>
+    <li><strong>本课（M2-D8-001 POM + 路径 2 + 85 用例）</strong>：<strong>39 文件变更</strong>（35 新增 + 4 扩列），<strong>12 个新 yaml 数据文件 / 28 新接口用例</strong>，<strong>7 个 Page 类</strong>（含 LoginPage 双端口 selectors 字典 + 2 个 mock 静态方法），<strong>8 条 UI 用例</strong>（路径 1 扩 6 + 路径 2 新 2），<strong>allure severity 5 helper</strong>（blocker / critical / normal / minor / trivial），以及 4 件<strong>关键 fix</strong>（路径 2 mock 注册顺序 / adminLogin 不是 login / admin 端 Element Plus / allure severity 装饰器降级）。</li>
+    <li><strong>L12 → L13 的进阶路径</strong>：起步（10 硬编码 + 1 yaml）→ 数据驱动（47 yaml + 2 UI）→ <strong>POM 完整化 + 路径 2 + 85 用例</strong>。L12 是"能跑数据流 + 跑得动 UI 起步"，L13 是"跑得动完整 UI 链路 + allure 报告分级"。</li>
+    <li><strong>本课的承诺</strong>：从 49 用例升级到 <strong>85 用例</strong>（47 D7 接口 + 28 D8 接口 + 2 D7 UI + 8 D8 UI），<code>pytest --collect-only testcases/</code> 输出 <strong>85+ collected</strong>（含 skip），跑 <code>pytest -m ui -v</code> 验证 UI 用例默认 skip——这<strong>是测试开发岗简历的硬通货</strong>。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    L12 = "<strong>YAML 数据驱动 + UI 起步</strong>"（28 文件 / 49 用例 / 5 yaml / 1 BasePage / 探针 / 路径 1 绕滑块），L13 = "<strong>POM 完整化 + UI 路径 2 + 85 用例</strong>"（39 文件 / 85 用例 / 12 yaml / 7 Page 类 / 路径 2 captcha mock / allure severity 5 helper）。前者决定能不能在 CI 里跑数据驱动 + UI 起步；后者决定能不能在 CI 里跑<strong>完整 POM 链路 + allure 报告分级 + UI 路径 2 真实填表</strong>。
+  </div>
+
+  <h2 id="sec2">2. 为什么测试工程师必须懂 POM 完整化 + UI 路径 2</h2>
+  <p>1 个 BasePage + 路径 1 绕滑块只能写"UI 起步"；7 个 Page 类 + 路径 2 captcha mock + 12 个新 yaml + allure severity 5 helper 才能写"<strong>独立设计完整 UI 框架 + captcha mock 方案 + allure 报告分级</strong>"——这是测试开发岗简历上<strong>必看</strong>的物证。3 个理由：</p>
+  <table>
+    <thead><tr><th>#</th><th>理由</th><th>对应简历/工作场景</th><th>本课落地</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>POM 完整化（7 Page 类 + 双 selectors dict）</strong></td>
+        <td>"用 Playwright sync_api 设计 7 个 Page Object（LoginPage / HomePage / ProdListPage / ProdDetailPage / CartPage / OrderPage / UserPage），每个类继承 BasePage + 自己的 selectors 字典，LoginPage 双端口兼容（shop Element Plus + admin el-form）"——校招测试岗必看</td>
+        <td><code>common/ui_pages.py</code> 从 91 → 460 行：<code>LoginPage</code>（双 selectors + 2 mock 静态方法）+ <code>HomePage</code> / <code>ProdListPage</code> / <code>ProdDetailPage</code> / <code>CartPage</code> / <code>OrderPage</code> / <code>UserPage</code></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>UI 路径 2 captcha mock（page.route 拦截）</strong></td>
+        <td>"理解 UI 路径 2：用 Playwright page.route 拦截 <code>/adminLogin</code> 和 <code>/captcha/**</code> 端点，返回 mock JSON 让前端组件跳过滑块 + 走通登录链路，真实填表单 + 跳首页"——端到端 UI 必杀器</td>
+        <td><code>LoginPage.mock_captcha_route(page)</code> + <code>LoginPage.mock_login_response(page)</code> 静态方法；<code>test_admin_login_real_form</code> + <code>test_shop_login_real_form</code> 2 条用例</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>allure severity 5 helper + 49 → 85 用例</strong></td>
+        <td>"在 allure_compat.py 加 5 个 severity helper（blocker / critical / normal / minor / trivial）+ pytest.ini 注册 severity marker，把接口用例从 49 扩到 85（12 个新 yaml 数据文件 + 12 个新 API wrapper + 7 个新 testcases）"——简历硬数字 + 报告分级</td>
+        <td><code>common/allure_compat.py</code> 加 <code>severity_blocker</code> / <code>severity_critical</code> / <code>severity_normal</code> / <code>severity_minor</code> / <code>severity_trivial</code> 5 个 helper；85 用例分布：47 D7 + 28 D8 接口 + 2 D7 UI + 8 D8 UI</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>D8 brief §0 总览</strong>：M2-D8-001 把 M2-D7-001 的 49 用例扩展到 <strong>85 用例</strong>（12 新 yaml + 接口补全 28 + 7 Page 类 + 路径 2 captcha mock + 6 个新 UI 用例）+ allure 严重度分级 + pytest.ini marker 注册。<strong>100% 离线可写</strong>（pip 不跑 / pytest --collect-only / UI 用例默认 skip if no browser）；启服务后即跑。<strong>4 件关键 fix</strong>：(1) 路径 2 必须先注册 route 再 goto；(2) mock 的是 <code>/adminLogin</code> 不是 <code>/login</code>；(3) admin 端用 Element Plus 不是 mall4v Verify；(4) allure severity 装饰器在 allure_compat.py 已降级。</p>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "基于 pytest + requests + Playwright 设计 mall4j 接口 + UI 自动化框架，从 49 用例扩到 85 用例（12 新 yaml 数据文件 + 12 新 API wrapper + 7 新 testcases），设计 7 个 Page Object 类（LoginPage 双端口 + 6 个业务 Page 类）+ 2 个 mock 静态方法落地 UI 路径 2 captcha mock（page.route 拦截 <code>/adminLogin</code> + <code>/captcha/**</code>），用 allure_compat.py 加 5 个 severity helper（blocker/critical/normal/minor/trivial）做报告分级"——这句直接写进 M2 项目经验。
+  </div>
+
+  <h2 id="sec3">3. 39 件产物速览：12 yaml + 12 API wrapper + 7 testcases + 7 Page 类 + 2 mock 静态方法</h2>
+  <p>来源：<code>test-cases/api-auto/</code> + <code>doc/3-API接口/M2-D8-001-brief.md</code>。本课 39 件产物全部是<strong>纯文本 + YAML + Python</strong>,无二进制:</p>
+  <table>
+    <thead><tr><th>类别</th><th>产物</th><th>路径</th><th>行数</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr>
+        <td rowspan="2"><strong>common 工具扩列（2 件）</strong></td>
+        <td><strong>ui_pages.py 扩列</strong></td>
+        <td><code>common/ui_pages.py</code></td>
+        <td>91 → <strong>460</strong></td>
+        <td>D8 新增：<code>LoginPage</code>（双 selectors + 2 mock 静态方法）+ <code>HomePage</code> / <code>ProdListPage</code> / <code>ProdDetailPage</code> / <code>CartPage</code> / <code>OrderPage</code> / <code>UserPage</code> 7 个 Page 类</td>
+      </tr>
+      <tr>
+        <td><strong>allure_compat.py 扩列</strong></td>
+        <td><code>common/allure_compat.py</code></td>
+        <td>74 → <strong>205</strong></td>
+        <td>D8 新增：<code>severity</code> 函数 + 5 个 helper（<code>severity_blocker</code> / <code>severity_critical</code> / <code>severity_normal</code> / <code>severity_minor</code> / <code>severity_trivial</code>）+ <code>title</code> / <code>description</code> / <code>link</code> / <code>dynamic_severity</code> / <code>step</code> 上下文管理器</td>
+      </tr>
+      <tr>
+        <td rowspan="12"><strong>12 yaml 数据文件（12 件新增）</strong></td>
+        <td><strong>register_data.yaml</strong></td>
+        <td><code>data/register_data.yaml</code></td>
+        <td>30</td>
+        <td>4 条 register_cases；覆盖 <code>/user/register</code>（2）+ <code>/user/sendSms</code>（2）；业务码 <code>'00000'×2 + 'A00001'×1 + 'A00014'×1</code></td>
+      </tr>
+      <tr>
+        <td><strong>category_data.yaml</strong></td>
+        <td><code>data/category_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 category_cases；覆盖 <code>/category/categoryInfo</code>；<code>'00000'×1 + 'A00014'×1</code></td>
+      </tr>
+      <tr>
+        <td><strong>search_data.yaml</strong></td>
+        <td><code>data/search_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 search_cases；覆盖 <code>/search/searchProdPage</code>；<code>'00000'×1 + 'A00014'×1</code></td>
+      </tr>
+      <tr>
+        <td><strong>prod_tag_data.yaml</strong></td>
+        <td><code>data/prod_tag_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 prod_tag_cases；覆盖 <code>/prod/tag/prodTagList</code></td>
+      </tr>
+      <tr>
+        <td><strong>pay_data.yaml</strong></td>
+        <td><code>data/pay_data.yaml</code></td>
+        <td>30</td>
+        <td>4 条 pay_cases；覆盖 <code>/p/order/pay</code>（2）+ <code>/p/order/normalPay</code>（2）</td>
+      </tr>
+      <tr>
+        <td><strong>index_img_data.yaml</strong></td>
+        <td><code>data/index_img_data.yaml</code></td>
+        <td>20</td>
+        <td>1 条 index_img_cases；覆盖 <code>/indexImg/indexImgs</code></td>
+      </tr>
+      <tr>
+        <td><strong>prod_comm_data.yaml</strong></td>
+        <td><code>data/prod_comm_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 prod_comm_cases；覆盖 <code>/prodComm/prodCommPageByProd</code></td>
+      </tr>
+      <tr>
+        <td><strong>area_data.yaml</strong></td>
+        <td><code>data/area_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 area_cases；覆盖 <code>/p/area/listByPid</code></td>
+      </tr>
+      <tr>
+        <td><strong>collection_data.yaml</strong></td>
+        <td><code>data/collection_data.yaml</code></td>
+        <td>30</td>
+        <td>4 条 collection_cases；覆盖 <code>/p/user/collection/page</code> + <code>/p/user/collection/addOrCancel</code></td>
+      </tr>
+      <tr>
+        <td><strong>delivery_data.yaml</strong></td>
+        <td><code>data/delivery_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 delivery_cases；覆盖 <code>/delivery/check</code></td>
+      </tr>
+      <tr>
+        <td><strong>notice_data.yaml</strong></td>
+        <td><code>data/notice_data.yaml</code></td>
+        <td>25</td>
+        <td>2 条 notice_cases；覆盖 <code>/shop/notice/topNoticeList</code> + <code>/shop/notice/noticeList</code></td>
+      </tr>
+      <tr>
+        <td><strong>sms_data.yaml</strong></td>
+        <td><code>data/sms_data.yaml</code></td>
+        <td>20</td>
+        <td>1 条 sms_cases；<strong>宽松断言</strong> <code>expected_code: NOT_00000</code>（dev 短信默认关）</td>
+      </tr>
+      <tr>
+        <td rowspan="3"><strong>12 API wrapper（12 件新增）</strong></td>
+        <td><strong>RegisterAPI</strong></td>
+        <td><code>api/register_api.py</code></td>
+        <td>40</td>
+        <td><code>RegisterAPI.register(user_name, password, phone)</code> + <code>send_sms(phone)</code></td>
+      </tr>
+      <tr>
+        <td><strong>PayAPI</strong></td>
+        <td><code>api/pay_api.py</code></td>
+        <td>40</td>
+        <td><code>PayAPI.pay(order_number)</code> + <code>normal_pay(order_number, pay_type)</code></td>
+      </tr>
+      <tr>
+        <td><strong>其他 10 wrapper</strong></td>
+        <td><code>api/{category,search,prod_tag,index_img,prod_comm,area,delivery,sms,collection,notice}_api.py</code></td>
+        <td>25 / 40</td>
+        <td>每个 wrapper 1-2 个端点（<code>collection.page/add_or_cancel</code>、<code>notice.top_notice_list/notice_list</code> 等）</td>
+      </tr>
+      <tr>
+        <td rowspan="4"><strong>7 testcases 接口（4 新增 + 3 合并）</strong></td>
+        <td><strong>test_register.py / test_category.py / test_search.py</strong></td>
+        <td><code>testcases/test_{register,category,search}.py</code></td>
+        <td>60 / 40 / 40</td>
+        <td>参数化驱动 4 + 2 + 2 条用例；含 allure feature/story/severity 装饰器</td>
+      </tr>
+      <tr>
+        <td><strong>test_pay.py</strong></td>
+        <td><code>testcases/test_pay.py</code></td>
+        <td>60</td>
+        <td>参数化驱动 4 条 pay 用例</td>
+      </tr>
+      <tr>
+        <td><strong>test_index_img.py / test_collection.py</strong></td>
+        <td><code>testcases/test_{index_img,collection}.py</code></td>
+        <td>35 / 60</td>
+        <td>1 + 4 条用例</td>
+      </tr>
+      <tr>
+        <td><strong>test_ui_login.py 扩列</strong></td>
+        <td><code>testcases/test_ui_login.py</code></td>
+        <td>113 → <strong>180</strong></td>
+        <td>加路径 2 captcha mock 2 条：<code>test_admin_login_real_form</code> + <code>test_shop_login_real_form</code>；原 2 条路径 1 保留</td>
+      </tr>
+      <tr>
+        <td rowspan="3"><strong>3 UI testcases 文件（路径 1 扩 6 条）</strong></td>
+        <td><strong>test_ui_prod_list.py</strong></td>
+        <td><code>testcases/test_ui_prod_list.py</code></td>
+        <td>80</td>
+        <td>2 条 UI 用例：<code>test_prod_list_loads</code> + <code>test_prod_list_search</code>；路径 1（API 注入）</td>
+      </tr>
+      <tr>
+        <td><strong>test_ui_cart.py</strong></td>
+        <td><code>testcases/test_ui_cart.py</code></td>
+        <td>80</td>
+        <td>2 条 UI 用例：<code>test_cart_add_item</code>（mock <code>/p/shopCart/changeItem</code>）+ <code>test_cart_list_loads</code></td>
+      </tr>
+      <tr>
+        <td><strong>test_ui_user.py</strong></td>
+        <td><code>testcases/test_ui_user.py</code></td>
+        <td>80</td>
+        <td>2 条 UI 用例：<code>test_user_addr_list</code> + <code>test_order_list_loads</code></td>
+      </tr>
+      <tr>
+        <td rowspan="3"><strong>配置 + 文档 扩列（3 文件）</strong></td>
+        <td><strong>conftest.py 扩列</strong></td>
+        <td><code>conftest.py</code></td>
+        <td>195 → <strong>260</strong></td>
+        <td>加 <code>allure_severity</code> fixture + <code>mock_route</code> helper + 7 个 Page 类 fixture（<code>login_page</code> / <code>home_page</code> / <code>prod_list_page</code> / <code>prod_detail_page</code> / <code>cart_page</code> / <code>order_page</code> / <code>user_page</code>）</td>
+      </tr>
+      <tr>
+        <td><strong>pytest.ini + requirements.txt 扩列</strong></td>
+        <td><code>test-cases/api-auto/</code></td>
+        <td>18→20 / 12</td>
+        <td>pytest.ini 加 <code>severity</code> marker；requirements.txt 加 <code>allure-pytest==2.13.5</code>（可选）+ <code>pytest-cov==5.0.0</code>（可选）</td>
+      </tr>
+      <tr>
+        <td><strong>README.md 扩列</strong></td>
+        <td><code>test-cases/api-auto/README.md</code></td>
+        <td>220 → <strong>320</strong></td>
+        <td>加 §6 POM 框架章节（7 Page 类职责 + selector 字典）+ §7 UI 路径 2 captcha mock 详解 + §8 用例统计表更新到 85 条</td>
+      </tr>
+  <p><strong>3 处关键设计决策</strong>：①<strong>LoginPage 双 selectors dict 双端口兼容</strong>——<code>selectors["shop"]</code> + <code>selectors["admin"]</code>，<code>fill_form(..., port="admin")</code> 按端口切换；②<strong>mock 函数做静态方法</strong>——<code>LoginPage.mock_captcha_route(page)</code> 不依赖 self，测试用例直接调；③<strong>allure severity 5 helper + pytest.ini marker 双兼容</strong>——<code>allure_compat</code> 没装 <code>allure-pytest</code> 时 noop，<code>pytest.ini</code> 加 <code>severity</code> marker 解决 <code>PytestUnknownMarkWarning</code>。</p>
+
+  <h2 id="sec4">4. 核心概念 × 5（POM 7 类 / 路径 2 mock / 双 selectors / allure severity 5 helper / 49 → 85 用例）</h2>
+
+  <h3>4.1 概念 1：POM 7 类架构（BasePage + 6 业务 Page + LoginPage 双端口）</h3>
+  <p>D7 只有一个 BasePage（<code>goto / fill / click / wait_for_url / inject_auth_cookie / screenshot / text</code>），所有用例直接 <code>page.goto</code> + <code>page.fill</code>。<strong>致命伤</strong>：选择器硬编码散落在 4-5 个用例里；改一处 selector 要改 N 个文件。<strong>POM 完整化</strong>的修法：每个页面一个 Page 类，selector 字典化封装在类里，用例只调业务方法（<code>add_cart()</code> / <code>checkout()</code> / <code>cancel_order()</code>）。本课 7 个 Page 类（BasePage + 6 业务 Page + LoginPage 双端口），每个继承 BasePage 复用 7 个方法 + 自己的 selectors 字典（key 中文业务名，value CSS selector）。</p>
+  <pre class="mermaid">
+graph TD
+    A["BasePage (D7)<br/>goto/fill/click/wait_for_url<br/>inject_auth_cookie/screenshot/text/count"] --> B["LoginPage (D8)<br/>双 selectors dict<br/>+ mock_captcha_route<br/>+ mock_login_response"]
+    A --> C["HomePage (D8)<br/>selectors: banner/category/cart_icon"]
+    A --> D["ProdListPage (D8)<br/>selectors: search_input/prod_card"]
+    A --> E["ProdDetailPage (D8)<br/>selectors: sku_btn/add_cart_btn"]
+    A --> F["CartPage (D8)<br/>selectors: item_row/checkout_btn"]
+    A --> G["OrderPage (D8)<br/>selectors: order_row/cancel_btn"]
+    A --> H["UserPage (D8)<br/>selectors: addr_list/my_order_link"]
+    B -. "port='shop' / 'admin'" .-> I["7 个 Page 类<br/>统一通过 login_page fixture 注入"]
+    style A fill:#d4e6f1,stroke:#2874a6
+    style B fill:#fadbd8,stroke:#c0392b
+    style I fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>POM 7 类核心代码</strong>（<code>common/ui_pages.py</code> 91 → 460 行）：</p>
+  <pre><code># === BasePage（D7 已交付，保留）===
+class BasePage:
+    def __init__(self, page): ...
+    def goto(self, url, *, timeout=5000): ...
+    def fill(self, selector, value): ...
+    def click(self, selector): ...
+    def wait_for_url(self, url_substr, *, timeout=5000): ...
+    def inject_auth_cookie(self, token, base_url): ...
+    def screenshot(self, path): ...
+    def text(self, selector): ...
+    def count(self, selector): ...   # D8 新增 helper
+
+
+# === LoginPage（D8 新增 — 双端口 + 2 mock 静态方法）===
+class LoginPage(BasePage):
+    selectors = {
+        "shop": {
+            "username": 'input[placeholder="账号"]',
+            "password": 'input[placeholder="密码"]',
+            "submit":   'button.login-btn',
+            "captcha_verify": '.verify-sub-area',
+        },
+        "admin": {
+            "username": 'input[placeholder="请输入用户名"]',
+            "password": 'input[placeholder="请输入密码"]',
+            "submit":   'button.el-button--primary',
+            "captcha_verify": '.el-captcha',
+        },
+    }
+
+    def goto_login(self, *, port="shop"): ...
+    def fill_form(self, username, password, *, port="shop"): ...
+    def click_submit(self, *, port="shop"): ...
+    def wait_for_login(self, *, timeout=5000): ...
+
+    @staticmethod
+    def mock_captcha_route(page) -> None: ...   # 拦截 **/captcha/**
+
+    @staticmethod
+    def mock_login_response(page, mock_token="mock_token_for_test") -> None:
+        # 拦截 **/adminLogin + **/login（双保险）
+
+
+# === ProdListPage（D8 新增 — 单端点 selector）===
+class ProdListPage(BasePage):
+    selectors = {
+        "search_input": 'input.search-input',
+        "search_btn":   'button.search-btn',
+        "prod_card":    '.prod-card',
+        "prod_name":    '.prod-name',
+        "prod_price":   '.prod-price',
+    }
+
+    def goto_category(self, category_id, *, base_url=None): ...
+    def search(self, keyword): ...
+    def wait_loaded(self, *, timeout=10000): ...
+    def count_products(self) -> int: ...
+
+
+# === CartPage / OrderPage / UserPage / ProdDetailPage / HomePage 类似结构 ===</code></pre>
+  <div class="interview">
+    <div class="who">POM 金句</div>
+    "<strong>Page 类让 selector 字典化 + 业务方法命名化</strong>"——把 <code>page.click('button.add-cart')</code> 封装成 <code>prod_detail_page.click_add_cart()</code>；改 selector 时只动 1 个 Page 类，N 个用例不受影响；方法命名面向业务（<code>add_cart</code> / <code>checkout</code> / <code>cancel_order</code>），可读性 + 简历加分。
+  </div>
+
+  <h3>4.2 概念 2：UI 路径 2 captcha mock（<code>mock_captcha_route</code> + <code>mock_login_response</code> 注册顺序）</h3>
+  <p>D7 用"<strong>路径 1</strong>"：调后端 <code>/adminLogin</code> API 拿 token + <code>inject_auth_cookie</code> 注入 + 跳首页——完全绕开滑块 + AES。优点是稳；缺点是没"真填表单"。D8 上"<strong>路径 2</strong>"：真实填表单 + mock captcha 端点 + mock login 端点 + 跳首页——<strong>关键 fix</strong>是<strong>必须在 <code>page.goto</code> 之前注册 route</strong>。</p>
+  <p>2 个 mock 静态方法（<code>LoginPage</code>）：</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant T as test_admin_login_real_form
+    participant M as mock_captcha_route
+    participant L as mock_login_response
+    participant P as page
+    participant B as 浏览器
+    participant V as mall4v dev server
+    Note over T,P: 步骤 1：注册 mock（必须在 goto 之前 — 关键 fix #1）
+    T->>M: LoginPage.mock_captcha_route(page)
+    M->>P: page.route("**/captcha/**", handler)
+    T->>L: LoginPage.mock_login_response(page, "mock_token")
+    L->>P: page.route("**/adminLogin", handler)
+    Note over T,B: 步骤 2：跳登录页 + 填表单
+    T->>P: login_page.goto_login(port="admin")
+    P->>V: GET /login
+    V-->>B: 200 HTML (含 Verify 组件)
+    Note over B,V: 步骤 3：前端调 captcha（被拦截）
+    B->>P: GET /captcha/get
+    P->>M: handle_captcha(route)
+    M-->>B: 200 + {"code":"00000","data":{"captchaVerification":"mock"}}
+    Note over B,P: 步骤 4：填表 + 提交（被拦截）
+    B->>P: POST /adminLogin {userName, passWord, captchaVerification}
+    P->>L: handle_login(route)
+    L-->>B: 200 + {"code":"00000","data":{"accessToken":"mock_token"}}
+    Note over B,P: 步骤 5：前端 cookie.set + router.replace('/home')
+    P->>V: GET /home (带 Authorization cookie)
+    V-->>P: 200 HTML (Sa-Token 鉴权通过)
+    P-->>T: wait_for_url("/home") 返回
+    T->>P: page.screenshot(path="ui-evidence/...")
+    style M fill:#fadbd8,stroke:#c0392b
+    style L fill:#fadbd8,stroke:#c0392b
+    style V fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>2 个 mock 静态方法核心代码</strong>（<code>common/ui_pages.py</code> 内）：</p>
+  <pre><code>@staticmethod
+def mock_captcha_route(page) -> None:
+    """拦截 captcha 端点，返回 mock 响应让前端组件跳过滑块交互。
+
+    关键：**必须在 page.goto 之前注册**，否则浏览器先发起真实网络请求。
+    """
+    import json
+
+    def handle_captcha(route) -> None:
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "code": "00000",
+                "msg": "success",
+                "data": {"captchaVerification": "mock_captcha_token_for_test"},
+            }),
+        )
+
+    page.route("**/captcha/**", handle_captcha)
+
+
+@staticmethod
+def mock_login_response(page, mock_token: str = "mock_token_for_test") -> None:
+    """拦截 adminLogin / login 端点，返回 mock Sa-Token 响应。
+
+    关键：**mock 的是 /adminLogin，不是 /login** —— mall4v 前端
+    login/index.vue:118-127 走 /adminLogin（即使是普通用户登录）。
+    """
+    import json
+
+    def handle_login(route) -> None:
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps({
+                "code": "00000",
+                "msg": "success",
+                "data": {
+                    "accessToken": mock_token,
+                    "refreshToken": "mock_refresh_token",
+                    "expiresIn": 86400,
+                },
+            }),
+        )
+
+    page.route("**/adminLogin", handle_login)
+    page.route("**/login", handle_login)   # 双保险</code></pre>
+  <div class="interview">
+    <div class="who">路径 2 金句</div>
+    "<strong>路径 2 = 真实填表单 + mock 后端</strong>"——路径 1 是"<strong>API 拿 token + cookie 注入 + 跳首页</strong>"（绕滑块）；路径 2 是"<strong>page.route 拦截 + 真实 fill / click + 跳首页</strong>"（保留前端流程）。两者互补：路径 1 验证"<strong>后端鉴权 → cookie → 前端路由</strong>"；路径 2 验证"<strong>前端表单 → mock 后端 → 前端路由</strong>"。简历硬数字写"Playwright Page Object + UI mock + 真实交互"就是路径 2 的功劳。
+  </div>
+
+  <h3>4.3 概念 3：admin vs shop 双 selectors dict（Element Plus vs mall4v Verify）</h3>
+  <p>mall4j 是个<strong>双前端</strong>项目：</p>
+  <ul>
+    <li><strong>shop 端</strong>（<code>front-end/mall4v/</code>，vue3 + Vant 4）：登录页用自研 <code>Verify.vue</code> 滑块组件，selector 是 <code>input[placeholder="账号"]</code> + <code>button.login-btn</code> + <code>.verify-sub-area</code>。</li>
+    <li><strong>admin 端</strong>（<code>front-end/mall4m/</code>，vue3 + Element Plus）：登录页用 <code>el-form</code> + <code>el-input</code> + <code>el-button</code>，selector 是 <code>input[placeholder="请输入用户名"]</code> + <code>button.el-button--primary</code> + <code>.el-captcha</code>。</li>
+  </ul>
+  <p><strong>Page 类 selectors 必须双 key</strong>：<code>selectors["shop"]</code> 和 <code>selectors["admin"]</code>，方法通过 <code>port</code> 参数切换。1 个 <code>LoginPage</code> 类同时支持两端，比写 <code>ShopLoginPage</code> + <code>AdminLoginPage</code> 两个类简洁 50%。</p>
+  <pre class="mermaid">
+graph LR
+    A["LoginPage.selectors"] --> B["shop<br/>input[placeholder=账号]<br/>button.login-btn<br/>.verify-sub-area"]
+    A --> C["admin<br/>input[placeholder=请输入用户名]<br/>button.el-button--primary<br/>.el-captcha"]
+    D["fill_form(username, pwd, port='shop')"] --> E["读 selectors['shop']"]
+    D2["fill_form(username, pwd, port='admin')"] --> F["读 selectors['admin']"]
+    style B fill:#eafaf1,stroke:#888
+    style C fill:#fef9e7,stroke:#888</pre>
+  <p><strong>双 selectors dict + port 切换核心代码</strong>（<code>LoginPage.fill_form</code>）：</p>
+  <pre><code>def fill_form(self, username: str, password: str, *, port: str = "shop") -> None:
+    """双端口填表单 —— 按 port 参数选 selectors。"""
+    if port not in ("shop", "admin"):
+        raise ValueError(f"port 必须是 shop 或 admin，当前: {port}")
+
+    sel = self.selectors[port]   # 关键：dict 双 key 切换
+    self.fill(sel["username"], username)
+    self.fill(sel["password"], password)
+
+
+def click_submit(self, *, port: str = "shop") -> None:
+    """双端口点登录 —— 按 port 参数选 selector。"""
+    sel = self.selectors[port]
+    self.click(sel["submit"])
+
+
+# === test_ui_login.py 用法（D8 扩列）===
+def test_admin_login_real_form(self, page, login_page, logger):
+    """admin 端登录 UI（路径 2）：真实填表单 + mock captcha + mock login。"""
+    admin_url = os.getenv("ADMIN_WEB_URL", "http://localhost:8085")
+
+    # 1. 注册 mock（必须在 goto 之前 — 关键 fix #1）
+    LoginPage.mock_captcha_route(page)
+    LoginPage.mock_login_response(page, mock_token="mock_admin_token_path2")
+
+    # 2. 真实跳登录页 + 填表单 + 点登录（port="admin"）
+    login_page.goto_login(port="admin")
+    login_page.fill_form(username="admin", password="123456", port="admin")
+    login_page.click_submit(port="admin")
+    login_page.wait_for_login(timeout=5000)
+
+    # 3. 截图存证
+    page.screenshot(path="ui-evidence/test_admin_login_real_form.png")</code></pre>
+  <div class="interview">
+    <div class="who">双 selectors 金句</div>
+    "<strong>双前端项目必须双 selectors 字典</strong>"——admin 端是 Element Plus，shop 端是 mall4v 自研组件，selector 完全不一样。1 个 <code>LoginPage</code> 类 + <code>selectors</code> 双 key + <code>port</code> 参数，比写 <code>ShopLoginPage</code> + <code>AdminLoginPage</code> 两个类简洁 50%，且未来加端（如 mall4uni uni-app）只需加第 3 个 key。
+  </div>
+
+  <h3>4.4 概念 4：allure severity 5 helper（blocker / critical / normal / minor / trivial + 优雅降级）</h3>
+  <p>allure 报告按 severity 排序，CI 出错时 <code>CRITICAL</code> 优先——这是 L13 升级 allure 的核心价值。D7 的 <code>allure_compat.py</code> 只有 <code>feature</code> / <code>story</code> / <code>attach</code> / <code>attachment_type</code> / <code>_HAS_ALLURE</code>，<strong>缺 severity 函数</strong>。D8 加 <code>severity</code> 函数 + 5 个 helper（blocker / critical / normal / minor / trivial）+ <code>title</code> / <code>description</code> / <code>link</code> / <code>dynamic_severity</code> / <code>step</code> 上下文管理器。</p>
+  <p>5 个 severity helper + pytest.ini marker 注册（避免 pytest 8.x <code>PytestUnknownMarkWarning</code>）：</p>
+  <pre class="mermaid">
+graph TD
+    A["test_register.py 顶部"] --> B["@allure.feature('用户注册')"]
+    B --> C["@allure.story('UserRegisterController')"]
+    C --> D["@pytest.mark.severity('normal')"]
+    D --> E["pytest.ini markers 注册"]
+    E --> F["severity: critical/normal/minor/trivial<br/>(blocker 单独走 @allure.severity_level.BLOCKER)"]
+    F --> G["allure_compat.severity_normal()<br/>(没装 allure 时是 noop)"]
+    G --> H["allure 报告按 severity 排序<br/>CRITICAL 优先"]
+    style D fill:#fadbd8,stroke:#c0392b
+    style G fill:#fef9e7,stroke:#888
+    style H fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>allure_compat 5 helper + severity 函数核心代码</strong>（<code>common/allure_compat.py</code> 74 → 205 行）：</p>
+  <pre><code># === severity 函数（D8 必须加 — D7 缺失）===
+def severity(level):
+    """用例严重度装饰器（allure.severity）。D8 新增。"""
+    if _HAS_ALLURE:
+        return _real_allure.severity(level)
+    return _identity_decorator(level)
+
+
+# === 5 个 severity helper（D8 新增）===
+def severity_blocker():
+    return severity(severity_level.BLOCKER)
+
+
+def severity_critical():
+    return severity(severity_level.CRITICAL)
+
+
+def severity_normal():
+    return severity(severity_level.NORMAL)
+
+
+def severity_minor():
+    return severity(severity_level.MINOR)
+
+
+def severity_trivial():
+    return severity(severity_level.TRIVIAL)
+
+
+# === title / description / link / dynamic_severity / step 上下文管理器（D8 新增）===
+def title(text: str): ...           # @allure.title("用例标题")
+def description(text: str): ...     # @allure.description("用例描述")
+def link(url: str, name: str = ""): ...
+
+
+def dynamic_severity(level):
+    """运行时设 severity（D8 新增 — 给 fixture 调用）。"""
+    if _HAS_ALLURE:
+        import allure as _a
+        _a.dynamic.severity(level)
+
+
+def step(name: str):
+    """allure.step(name) — 用作上下文管理器 with allure.step('xxx'): ..."""
+    if _HAS_ALLURE:
+        return _real_allure.step(name)
+    return _StepContext()   # no-op 占位</code></pre>
+  <div class="interview">
+    <div class="who">severity 金句</div>
+    "<strong>5 helper + pytest.ini marker 双兼容</strong>"——<code>allure_compat.severity_normal()</code> 没装 <code>allure-pytest</code> 时是 <code>noop</code>；<code>pytest.ini</code> 加 <code>severity</code> marker 解决 pytest 8.x <code>PytestUnknownMarkWarning</code>。<strong>两个修法必须同时做</strong>——只做 (a) 没 allure 时 marker 报 unknown；只做 (b) 装了 allure 时 marker 不进报告。
+  </div>
+
+  <h3>4.5 概念 5：从 49 到 85 用例的覆盖率扩展（12 yaml + 12 API wrapper + 18 testcases）</h3>
+  <p>D7 已交付 47 接口用例 + 2 UI 用例 = 49 用例。D8 扩展到 85 用例，<strong>不是简单复制 D7 风格 yaml</strong>——D8 的扩展思路是：每个新 Controller 一套"<strong>yaml + API wrapper + testcases</strong>"三件套。</p>
+  <p>3 个层次的扩展：</p>
+  <pre class="mermaid">
+graph LR
+    A["D7 已交付<br/>47 接口 + 2 UI = 49 用例"] --> B["D8 阶段 1<br/>12 新 yaml + 12 API wrapper<br/>+ 7 新 testcases<br/>= 28 接口用例"]
+    B --> C["D8 阶段 2<br/>路径 2 mock<br/>+ 真实填表单<br/>= 2 UI 用例"]
+    C --> D["D8 阶段 3<br/>路径 1 扩 6 条 UI<br/>= 6 UI 用例"]
+    D --> E["D7 + D8 合计<br/>47 + 28 + 2 + 8 = 85 用例"]
+    style A fill:#eafaf1,stroke:#888
+    style E fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>D8 不直接复制 D7 风格的 4 个原因</strong>：</p>
+  <ol>
+    <li><strong>每个 Controller 一套 yaml</strong>——<code>register_data.yaml</code> 只含 register 端点 4 条；不混到 <code>user_data.yaml</code>。便于横向对比（register 失败只看 register_data.yaml）。</li>
+    <li><strong>API wrapper 独立文件</strong>——<code>api/register_api.py</code> 只含 2 个方法（<code>register</code> + <code>send_sms</code>）；不混到 <code>user_api.py</code>。便于单元测试 + mock 替换。</li>
+    <li><strong>testcases 独立文件</strong>——<code>test_register.py</code> 只参数化 4 条 register 用例；不混到 <code>test_user.py</code>。便于按 Controller 单独跑（如 <code>pytest test_register.py</code>）。</li>
+    <li><strong>业务码字符串断言</strong>——沿用 L11 §4.2 五业务码模板（<code>'00000'</code> / <code>'A00001'</code> / <code>'A00004'</code> / <code>'A00005'</code> / <code>'A00014'</code>），<strong>不传 Integer 200</strong>（D7 已修的 bug 别再踩）。</li>
+  </ol>
+  <p><strong>用例数验证表</strong>：</p>
+  <pre><code># === 验证脚本（跑完贴到 progress.md）===
+# 1. collect-only 总数
+pytest --collect-only testcases/ -q | tail -5
+# 期望: "85 tests collected"（含 skip + UI skip）
+
+# 2. yaml case 总数
+grep -c "^- name:" data/*.yaml | awk -F: '{sum += $2} END {print sum}'
+# 期望: 75（47 D7 + 28 D8）
+
+# 3. Page 类数（验收清单 #6）
+grep -cE "^class (LoginPage|HomePage|ProdListPage|ProdDetailPage|CartPage|OrderPage|UserPage)" common/ui_pages.py
+# 期望: 7
+
+# 4. mock 静态方法数（验收清单 #7）
+grep -cE "def mock_captcha_route|def mock_login_response" common/ui_pages.py
+# 期望: 2
+
+# 5. allure severity marker（验收清单 #8）
+grep "severity:" pytest.ini
+# 期望: 1 行匹配</code></pre>
+  <div class="interview">
+    <div class="who">扩展金句</div>
+    "<strong>每个 Controller 一套 yaml + API wrapper + testcases 三件套</strong>"——不是简单复制 D7 风格的 yaml，而是按 Controller 维度横向铺开 12 个 Controller + 28 条新接口用例。这是简历硬数字"85 用例 / 20 yaml 数据文件 / 18 API wrapper / 15 testcases"的来源——也是测试开发岗的核心物证。
+  </div>
+
+  <h2 id="sec5">5. 动手练：5 分钟 pytest --collect-only 验证 90 用例</h2>
+  <p>学完概念后,5 分钟亲手跑一遍,<strong>这是 L13 的 win 产物</strong>——不需要后端启服务（<code>pytest --collect-only</code> 只收集不执行，12 yaml × N case + 7 新接口 + 8 UI 全部 collect 到 85 条）。</p>
+  <ol>
+    <li><strong>装依赖（可选）</strong>——<code>cd test-cases/api-auto</code> → <code>pip install -r requirements.txt</code>（pytest / requests / pyyaml / allure-pytest / playwright / pytest-playwright）。**allure / Playwright 不强求**——未装也能跑 collect-only。</li>
+    <li><strong>copy env</strong>——<code>cp .env.example .env</code>（先不填，5 条商品 / 订单默认 skip）。</li>
+    <li><strong>collect-only 全部</strong>——<code>pytest --collect-only testcases/</code>，应看到 <strong>85 tests collected</strong>。</li>
+    <li><strong>单独跑 yaml 驱动</strong>——<code>pytest -v testcases/test_register.py</code>，看 4 条 yaml 参数化的展开（<code>test_register[用户注册-正常]</code> ~ <code>test_register[发送短信验证码-空手机号]</code>）。</li>
+    <li><strong>验证 7 Page 类</strong>——<code>grep -cE "^class (LoginPage|HomePage|ProdListPage|ProdDetailPage|CartPage|OrderPage|UserPage)" common/ui_pages.py</code>，应输出 <strong>7</strong>。</li>
+    <li><strong>验证 mock 静态方法</strong>——<code>grep -cE "def mock_captcha_route|def mock_login_response" common/ui_pages.py</code>，应输出 <strong>2</strong>。</li>
+    <li><strong>看 UI 缺包降级</strong>（可选）——故意 <code>pip uninstall playwright pytest-playwright</code>，再跑 <code>pytest --collect-only testcases/test_ui_login.py</code>，依然 collect 到 4 条 UI 用例但都标 SKIPPED。</li>
+  </ol>
+  <h3>5.1 验证标准</h3>
+  <ul>
+    <li>✅ <code>pytest --collect-only testcases/</code> 输出 <strong>85 tests collected</strong>（含 skip + UI skip）</li>
+    <li>✅ <code>pytest -v testcases/test_register.py</code> 看到 4 个 parametrize ID</li>
+    <li>✅ <code>grep -cE "^class (LoginPage|...|UserPage)" common/ui_pages.py</code> 输出 <strong>7</strong></li>
+    <li>✅ <code>grep -cE "def mock_captcha_route|def mock_login_response" common/ui_pages.py</code> 输出 <strong>2</strong></li>
+    <li>✅ <code>grep "severity:" pytest.ini</code> 至少 1 行匹配；未装 playwright 时 collect-only 仍 85 条；UI 用例默认 skip</li>
+  </ul>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课,把任何卡点（POM 7 类的继承链设计 / 路径 2 mock 的注册顺序与 adminLogin 双保险 / admin 端 Element Plus selector 与 shop 端 mall4v 自研 selector 的差异 / allure severity 5 helper 在没装 allure 时的降级机制 / 49 → 85 用例扩展为什么不直接复制 D7 yaml）抛给你的 AI 教师追问——单点困惑往往牵出整条"POM 完整化 + UI 路径 2 + allure 报告分级"的工程链,问得越具体，回答越能反哺 M2-D9-001（CI + GitHub Actions）的 CI 配置基座。
+  </div>
+
+  <h2 id="sec6">6. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span><code>LoginPage.mock_captcha_route(page)</code> 必须在 <code>page.goto("/login")</code> 之前注册还是之后？为什么？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 必须在 <code>page.goto</code> 之后注册；因为 page.goto 后 DOM 才加载完，page.route 才能找到 captcha 元素</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 必须在 <code>page.goto</code> 之前注册；因为 <code>page.route</code> 只对<strong>注册后发起的网络请求</strong>生效，浏览器先发真实网络请求再注册拦截就晚了，前端组件会先调 <code>/captcha/get</code> 拿到真实 captcha 走滑块流程</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 注册顺序无所谓，Playwright 会自动重放历史请求</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) 必须在 <code>page.goto</code> 之后注册，因为浏览器要先建立连接才能拦截</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>admin 端 vs shop 端的登录页 selector 为什么需要两套 dict？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 因为 admin 端是 Java 写的，shop 端是 JavaScript 写的，selector 语法不同</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 因为 admin 端（mall4m）用 Element Plus 的 <code>el-form</code> + <code>el-input</code> + <code>el-button</code>，selector 是 <code>input[placeholder="请输入用户名"]</code>；shop 端（mall4v）用自研 <code>Verify.vue</code> 滑块组件 + <code>button.login-btn</code>，selector 是 <code>input[placeholder="账号"]</code>。两套 selector 完全不一样，必须用 <code>LoginPage.selectors["shop"]</code> + <code>selectors["admin"]</code> 双 key + <code>port</code> 参数切换</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 因为 admin 端是 Vue 2 写的，shop 端是 Vue 3 写的</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 不需要两套 dict，写一个通用的 <code>input</code> 就行</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>从 49 到 85 用例的扩展为什么不直接复制 D7 风格的 yaml？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 因为 D7 风格的 yaml 用了探针机制，D8 不需要</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 因为 D8 是按 Controller 维度横向铺开（每个 Controller 一套 yaml + API wrapper + testcases 三件套），便于按 Controller 单独跑 + 横向对比 + 简历硬数字；不是简单地把所有用例堆到一个 yaml 里</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 因为 D7 风格的 yaml 有 bug</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 因为 yaml 太多会拖慢 pytest collect 速度</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0012-pytest-yaml-ui-automation.html">第 12 课 pytest YAML 数据驱动 + Playwright UI 自动化起步（回顾 D7 47 yaml 用例）</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0011-postman-full-chain.html">第 11 课 Postman 完整链路（回顾 D5 Postman v3.0 探针 + 业务码）</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../test-cases/api-auto/README.md">api-auto 框架说明（test-cases/api-auto/README.md §6 POM + §7 UI 路径 2）</a></li>
+      <li><a href="../test-cases/api-auto/conftest.py">conftest.py 7 Page fixture + allure_severity + mock_route（test-cases/api-auto/conftest.py）</a></li>
+      <li><a href="../test-cases/api-auto/common/ui_pages.py">POM 7 Page 类 + 2 mock 静态方法（test-cases/api-auto/common/ui_pages.py）</a></li>
+      <li><a href="../test-cases/api-auto/common/allure_compat.py">allure_compat severity 5 helper（test-cases/api-auto/common/allure_compat.py）</a></li>
+      <li><a href="../test-cases/api-auto/data/register_data.yaml">register yaml 4 条样例（test-cases/api-auto/data/register_data.yaml）</a></li>
+      <li><a href="../test-cases/api-auto/data/sms_data.yaml">sms yaml 宽松断言样例（test-cases/api-auto/data/sms_data.yaml）</a></li>
+      <li><a href="../test-cases/api-auto/api/register_api.py">RegisterAPI wrapper（test-cases/api-auto/api/register_api.py）</a></li>
+      <li><a href="../test-cases/api-auto/testcases/test_register.py">test_register.py 参数化 4 条（test-cases/api-auto/testcases/test_register.py）</a></li>
+      <li><a href="../test-cases/api-auto/testcases/test_ui_login.py">UI 路径 1 + 路径 2 共 4 条（test-cases/api-auto/testcases/test_ui_login.py）</a></li>
+      <li><a href="../test-cases/api-auto/testcases/test_ui_cart.py">UI 加购 + 购物车列表 mock changeItem（test-cases/api-auto/testcases/test_ui_cart.py）</a></li>
+      <li><a href="../doc/3-API接口/M2-D8-001-feasibility.md">M2-D8-001 可行性预审（doc/3-API接口/M2-D8-001-feasibility.md）</a></li>
+      <li><a href="../doc/3-API接口/M2-D8-001-brief.md">M2-D8-001 实施 brief（doc/3-API接口/M2-D8-001-brief.md）</a></li>
+      <li><a href="../reference/0013-pom-path2-cheatsheet.html">POM + 路径 2 速查卡（reference/0013-pom-path2-cheatsheet.html）</a></li>
+      <li><a href="../learning-records/0013-pom-path2.md">本课学习记录（learning-records/0013-pom-path2.md）</a></li>
+      <li><a href="../CONTEXT.md">领域语言速查（CONTEXT.md §3 可测点速查）</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M2-D8-001 行）</a></li>
+    </ul>
+    <div>L10（pytest 起步 10）+ L11（Postman 链路 40）+ L12（YAML 数据驱动 47 + UI 起步 2）+ L13（POM 7 Page + 路径 2 captcha mock + allure severity 5 + 85 用例）= mall4j 接口 + UI 测试工程"POM + 路径 2 + allure 报告分级"闭环。下一课进入 M2-D9-001（CI + GitHub Actions）。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=B(1), Q3=B(1) ===
+  var correctMap = { q1: '1', q2: '1', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec4', text: '回到第 4 节：再读"UI 路径 2 captcha mock"——注册顺序 + adminLogin 双保险' },
+    q2: { href: '#sec4', text: '回到第 4 节：再读"admin vs shop 双 selectors dict"——Element Plus vs mall4v Verify' },
+    q3: { href: '#sec4', text: '回到第 4 节：再读"从 49 到 85 用例的覆盖率扩展"——按 Controller 横向铺开三件套' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs[i] ? false : true; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

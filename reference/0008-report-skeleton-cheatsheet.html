@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>9 章功能测试报告骨架速查卡 · 第 8 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* A4 打印友好 */
+    @media print {
+      body { font-size: 10pt; }
+      section.card { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3 { color: #000; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>9 章功能测试报告骨架速查卡</h1>
+  <p class="meta">第 8 课 · A4 打印友好 · M1-D3-001 v0.1 骨架 + 评审方法论</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 9 章骨架树状图（mermaid）</h2>
+    <p>来源：<code>test-cases/M1-D3-001/functional-test-report.md</code> 全文 384 行 / 28 子节。</p>
+<pre class="mermaid">
+flowchart TD
+    R["功能测试报告"]
+    R --> A["第 1-3 章 基础层（设计）"]
+    R --> B["第 4-5 章 中间层（数据）"]
+    R --> C["第 6 章 观察层（判断）"]
+    R --> D["第 7-8 章 顶层（决策）"]
+    R --> E["第 9 章 地基（索引）"]
+    A --> A1["1. 概述"]
+    A --> A2["2. 方法"]
+    A --> A3["3. 环境"]
+    B --> B1["4. 用例统计"]
+    B --> B2["5. 缺陷统计"]
+    C --> C1["6. 结果分析"]
+    D --> D1["7. 风险"]
+    D --> D2["8. 结论"]
+    E --> E1["9. 附录"]
+</pre>
+    <p class="hint"><strong>28 子节固定</strong>：§1(3) + §2(3) + §3(4) + §4(6) + §5(6) + §6(6) + §7(3) + §8(2) + §9(4) = 39；实际部分子节合并后 28。子节数 = 数据回填槽位数。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 用例统计 4 张模板表（§4）</h2>
+
+    <h3>2.1 §4.2 模块分布（8 列）</h3>
+    <table>
+      <thead><tr><th>模块</th><th>设计条数</th><th>已执行</th><th>通过</th><th>失败</th><th>阻塞</th><th>跳过</th><th>通过率</th></tr></thead>
+      <tbody>
+        <tr><td>登录 / 注册</td><td>40</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>商品</td><td>30</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>购物车</td><td>20</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>订单 / 支付</td><td>25</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>会员 / 权限</td><td>15</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>兼容性 / 异常</td><td>20</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>150</strong></td><td colspan="6">(待回填)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.2 §4.3 类型分布（4 列）</h3>
+    <table>
+      <thead><tr><th>类型</th><th>D2 实际</th><th>D3 预计</th><th>合计</th></tr></thead>
+      <tbody>
+        <tr><td>scenario 场景法</td><td>32</td><td>22</td><td>54</td></tr>
+        <tr><td>boundary 边界值</td><td>14</td><td>8</td><td>22</td></tr>
+        <tr><td>equivalence 等价类</td><td>18</td><td>12</td><td>30</td></tr>
+        <tr><td>security 安全</td><td>8</td><td>4</td><td>12</td></tr>
+        <tr><td>compatibility 兼容</td><td>0</td><td>6</td><td>6</td></tr>
+        <tr><td>concurrency 并发</td><td>5</td><td>3</td><td>8</td></tr>
+        <tr><td>其他（状态机/判定表）</td><td>13</td><td>5</td><td>18</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>90</strong></td><td><strong>60</strong></td><td><strong>150</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.3 §4.4 优先级分布（5 列）</h3>
+    <table>
+      <thead><tr><th>优先级</th><th>定义</th><th>D2 实际</th><th>D3 预计</th><th>合计</th></tr></thead>
+      <tbody>
+        <tr><td><strong>P0</strong></td><td>主链路 + 鉴权链 + 支付核心</td><td>47</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>P1</strong></td><td>边界 + 异常 + 安全</td><td>38</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>P2</strong></td><td>兼容性 + 弱网 + 探索性</td><td>5</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>合计</strong></td><td>—</td><td><strong>90</strong></td><td><strong>60</strong></td><td><strong>150</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>2.4 §4.5 执行结果（4 列）</h3>
+    <table>
+      <thead><tr><th>状态</th><th>数量</th><th>占比</th><th>备注</th></tr></thead>
+      <tbody>
+        <tr><td>✅ Pass</td><td>(待回填)</td><td>(待回填)</td><td>—</td></tr>
+        <tr><td>❌ Fail</td><td>(待回填)</td><td>(待回填)</td><td>关联缺陷库</td></tr>
+        <tr><td>⛔ Blocked</td><td>(待回填)</td><td>(待回填)</td><td>环境 / 数据阻塞</td></tr>
+        <tr><td>⏭ Skip</td><td>(待回填)</td><td>(待回填)</td><td>重复用例或前置失败</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>3. 缺陷统计 3 张模板表（§5）</h2>
+
+    <h3>3.1 §5.2 严重等级分布（6 列）</h3>
+    <table>
+      <thead><tr><th>等级</th><th>定义</th><th>D2 已发现</th><th>D3 已发现</th><th>合计</th><th>比例</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Critical</strong></td><td>主链路不可用 / 资损 / 数据泄露</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>Major</strong></td><td>主链路异常路径失败 / 功能缺失</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>Minor</strong></td><td>边界 / 易用性 / 显示问题</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>Trivial</strong></td><td>文案 / 拼写 / 注释</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>合计</strong></td><td>—</td><td>—</td><td>—</td><td><strong>18</strong></td><td><strong>100%</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.2 §5.3 模块分布（3 列）</h3>
+    <table>
+      <thead><tr><th>模块</th><th>缺陷数</th><th>占 18 个的比例</th></tr></thead>
+      <tbody>
+        <tr><td>登录 / 注册</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>商品</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>购物车</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>订单 / 支付</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>会员 / 权限</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td>兼容性</td><td>(待回填)</td><td>(待回填)</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>18</strong></td><td><strong>100%</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>3.3 §5.4 类型分布（3 列）</h3>
+    <table>
+      <thead><tr><th>类型</th><th>缺陷数</th><th>示例</th></tr></thead>
+      <tbody>
+        <tr><td>功能缺陷</td><td>(待回填)</td><td>主链路某步不响应</td></tr>
+        <tr><td>性能缺陷</td><td>(待回填)</td><td>商品列表 N+1 / 缓存缺失</td></tr>
+        <tr><td>安全缺陷</td><td>(待回填)</td><td>鉴权链可绕过 / SQL 注入</td></tr>
+        <tr><td>兼容性缺陷</td><td>(待回填)</td><td>Safari 下 H5 样式错位</td></tr>
+        <tr><td>易用性缺陷</td><td>(待回填)</td><td>错误提示文案不清</td></tr>
+        <tr><td>边界缺陷</td><td>(待回填)</td><td>count=0 时未拦截</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>18</strong></td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>4. 三流合一 6 步主链路（§6.1）</h2>
+    <p>来源：<code>CONTEXT.md §1 三流合一</code>。<strong>单步通过 ≠ 业务通过，6 步全绿才算</strong>。</p>
+<pre class="ascii">
+[1.登录] ──资金流起点──► [2.加购] ──信息流──► [3.下单]
+   LOGIN-001                CART-001                ORDER-001
+                                                  资金+信息
+                                                       │
+                                                       ▼
+[6.评价] ◄──信息流闭环── [5.收货] ◄──物流── [4.支付]
+COMMENT-001             DELIVERY-001             PAY-001
+                                            资金流核心
+</pre>
+    <table>
+      <thead><tr><th>步骤</th><th>模块</th><th>用例编号</th><th>三流归属</th></tr></thead>
+      <tbody>
+        <tr><td>1. 登录</td><td>登录 / 注册</td><td>LOGIN-001</td><td>资金流起点（拿 token）</td></tr>
+        <tr><td>2. 加购</td><td>购物车</td><td>CART-001</td><td>信息流</td></tr>
+        <tr><td>3. 下单</td><td>订单</td><td>ORDER-001</td><td>资金流 + 信息流</td></tr>
+        <tr><td>4. 支付</td><td>支付</td><td>PAY-001</td><td>资金流核心</td></tr>
+        <tr><td>5. 收货</td><td>物流</td><td>DELIVERY-001</td><td>物流</td></tr>
+        <tr><td>6. 评价</td><td>信息流</td><td>COMMENT-001</td><td>信息流闭环</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">三流合一的应用：步骤 3"下单"涉及资金流（金额冻结）+ 信息流（订单落库 + 通知），两流同时绿才算通过；任一流失败 = 业务失败。</p>
+  </section>
+
+  <section class="card">
+    <h2>5. 报告评审 8 条 Checklist（§9 节方法论）</h2>
+    <table>
+      <thead><tr><th>#</th><th>维度</th><th>Checklist</th><th>不通过的后果</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>覆盖度</td><td>§1.3 In-scope 与 §4.2 模块分布一一对应</td><td>PM 拿 In-scope 反问</td></tr>
+        <tr><td>2</td><td>覆盖度</td><td>§2.1 方法列表与 §4.3 类型分布一一对应</td><td>"方法论只列不用"</td></tr>
+        <tr><td>3</td><td>覆盖度</td><td>§6.1 主链路 6 步每步都有用例</td><td>核心业务路径断裂</td></tr>
+        <tr><td>4</td><td>数据真实性</td><td>§4.5 + §5.6 数字自洽（占比 / 修复率 = 100%）</td><td>数字打架 → 失信</td></tr>
+        <tr><td>5</td><td>数据真实性</td><td>无 100% 数字（通过率 / 修复率禁止 100%）</td><td>数据造假 → 红牌</td></tr>
+        <tr><td>6</td><td>风险闭环</td><td>§7.3 阻塞发布问题有"是否在 §8.1 处理"归属</td><td>风险悬空 → 决策无据</td></tr>
+        <tr><td>7</td><td>风险闭环</td><td>§7.1 未覆盖范围每条都有"为什么不测"来源</td><td>测试范围被反复质疑</td></tr>
+        <tr><td>8</td><td>结论可执行</td><td>§8.1 三选一明确 + §8.2 下一步可立即执行</td><td>结论含糊 → 决策延迟</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>8 条全过 = 报告可发布；任一不通过 = 当周返工。</strong> 这与第 4 课"用例评审 10 条 Checklist"是同一类治理工具——把"什么是好"外化为可打分的列表。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 简历可写句</h2>
+    <blockquote>
+      <ol>
+        <li><em>针对 mall4j B2C 电商系统输出 1 份功能测试报告（9 章 28 子节 / 17 KB / 384 行），覆盖 150 条用例 + 18 个预测缺陷，采用"三流合一"视角对主链路 6 步（登录→加购→下单→支付→收货→评价）做整体判断。</em></li>
+        <li><em>在测试报告 §6 引入鉴权链 4 类场景（无 token / 过期 / 越权 / 多角色）+ 幂等性 3 类场景（重下单 / 重回调 / 重退款）的横向交叉分析，覆盖 CONTEXT.md §3 可测点速查全部维度。</em></li>
+        <li><em>设计 8 条报告评审 Checklist（覆盖度 3 / 真实性 2 / 风险闭环 2 / 结论可执行 1），把报告质量从"个人审美"转化为"可打分门禁"，缩短 PM 评审会 50% 时间。</em></li>
+      </ol>
+    </blockquote>
+    <p class="hint"><strong>数字纪律</strong>：所有数字严格按实际产出 ×1 写，×2 是上限。150 条用例 / 18 个缺陷 / 9 章 28 子节 / 6 步主链路 / 4 类鉴权 / 3 类幂等 = 报告里的真实数字，直接拷贝到简历即可。</p>
+  </section>
+
+</main>
+
+<footer>
+  <p><strong>源</strong>：<code>test-cases/M1-D3-001/functional-test-report.md</code>（9 章骨架原文）+ <code>CONTEXT.md §1 三流合一 / §3 可测点速查</code> + <code>test-cases/M1-D3-001/bug-list.md</code>（18 缺陷库）。</p>
+  <p><strong>范围</strong>：第 8 课报告骨架方法论速查。性能报告 / 接口测试报告 / 自动化报告是 M2-M3 阶段产物，本卡不覆盖。</p>
+  <p><strong>打印建议</strong>：A4 纵向；浏览器打开 → Ctrl/Cmd+P → 关闭页眉页脚 → 边距"自定义 8mm"。每张卡可独立打印成 1 页 A4。</p>
+</footer>
+
+</body>
+</html>

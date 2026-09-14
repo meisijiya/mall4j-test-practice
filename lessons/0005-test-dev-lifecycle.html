@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 5 课 测试开发全流程（收官）</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 5 课：测试开发全流程图（收官）——14 天端到端流程地图 + 每步交付物 + 简历话术</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 5 课</span>
+    <span class="tag">难度 ★★★☆☆</span>
+    <span class="tag">时长 40 分钟</span>
+    <span class="tag">实战对象 14 天计划总图</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（前 4 课的连接）</a></li>
+      <li><a href="#sec2">端到端流程图（D1-D14 里程碑地图）</a></li>
+      <li><a href="#sec3">七大阶段速查表（本课核心交付物）</a></li>
+      <li><a href="#sec4">阶段一：需求评审与脑图（XMind + 评审纪要）</a></li>
+      <li><a href="#sec5">阶段二：功能用例与缺陷（Excel/Zentao + 150 条 + 18 bug）</a></li>
+      <li><a href="#sec6">阶段三：接口调试与链路（Postman + 40 用例）</a></li>
+      <li><a href="#sec7">阶段四：双自动化（pytest + Playwright + 80+ 接口 + 12 UI 场景）</a></li>
+      <li><a href="#sec8">阶段五：CI 接入（GitHub Actions + Allure）</a></li>
+      <li><a href="#sec9">阶段六：性能压测（Locust + 3 场景 + 调优复测）</a></li>
+      <li><a href="#sec10">阶段七：报告与简历（3 仓库 + 简历 6 句）</a></li>
+      <li><a href="#sec11">M4 预告：mall-ai Agent 评测（LLM-as-Judge）</a></li>
+      <li><a href="#sec12">下一步：进入 D1 启动 mall4j + 课堂小测</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（前 4 课的连接）</h2>
+  <p>前 4 课搭了 4 块心智拼图，本课把它们拼回一张时间轴地图：</p>
+  <ul>
+    <li><strong>第 1 课（业务全貌）</strong>：mall4j 是 B2C 单商户电商，<code>yami-shop-api</code>(:8086) + <code>yami-shop-admin</code>(:8085) 双后端；五流贯通 + 七模块；主链路 <code>商品/SKU → 加购 → 确认 → 提交 → 支付 → 后台发货</code>。</li>
+    <li><strong>第 2 课（三流 + 状态机）</strong>：一笔订单的钱（资金流）/ 消息（信息流）/ 物件（物流）必须同步前进；订单 6 个状态（UNPAY/PADYED/CONSIGNMENT/CONFIRM/SUCCESS/CLOSE）的 9 条迁移路径，每条都有触发方与代码入口。</li>
+    <li><strong>第 3 课（模块边界 + 可测点）</strong>：<code>yami-shop-api</code> 与 <code>yami-shop-admin</code> 接口各管各的；每个模块至少 3 个可测点，对应等价类 / 边界值 / 场景法 / 状态迁移四种方法之一。</li>
+    <li><strong>第 4 课（用例方法论）</strong>：等价类（输入域划分）/ 边界值（边界 +1 -1）/ 场景法（业务流串联）/ 状态迁移（合法迁移 + 非法迁移）——四种方法按模块特性选配。</li>
+  </ul>
+  <p><strong>本课的承诺</strong>：把这 4 块拼图挂到一张端到端流程图上——从"读启动文档"到"GitHub 三个仓库 + 简历 v3"，每一步告诉你<strong>今天输入什么、做什么动作、产出什么文件、用什么工具、简历怎么写</strong>。读完后用户应当能用一张图讲清 14 天（v3.0 里程碑驱动版本不设死线）的全部故事。</p>
+
+  <h2 id="sec2">2. 端到端流程图（D1-D14 里程碑地图）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> 第四章 D1-D14（v3.0 里程碑驱动完整版）+ 第九章阶段→简历对照表。</p>
+  <div class="interview">
+    <div class="who">关键判断（v3.0 修订）</div>
+    <ol>
+      <li><strong>不是 14 天死线</strong>：v3.0 起解除硬性日历，里程碑驱动，建议每天 5h，可弹性压缩或拉长。</li>
+      <li><strong>M2 是最低可投状态</strong>：D6-D9 接口 80+ 用例 + UI 12 场景 + GitHub Actions 绿勾完成即可<strong>滚动投递日常实习</strong>，不等"完美"。</li>
+      <li><strong>M5 与 M2-M4 并行</strong>：M2 达成后投递与后续阶段并行推进，秋招（2026-09~11）/ 春招（2027-02~04）节点自然对齐。</li>
+    </ol>
+  </div>
+  <p>里程碑流转：</p>
+  <pre><code>M1 功能 + 接口
+  └── 需求评审 → 功能用例 → 接口调试
+       → 阶段一 / 二 / 三 完结
+            ↓
+M2 双自动化 + CI（最低可投门禁）
+  └── pytest+Playwright → GitHub Actions 绿勾
+       → 阶段四 / 五 完结（即可开始投递日常实习）
+            ↓
+M3 性能 + 调优
+  └── Locust 3 场景 → 调优复测
+       → 阶段六 完结
+            ↓
+M4 mall-ai Agent 评测
+  └── docker-compose + LLM-as-Judge
+       → 阶段七补充 完结
+            ↓
+M5 投递冲刺（与 M2-M4 并行滚动）
+  └── 3 仓库 + 简历 v3 + 投递 10-15 家
+       → 阶段七 主线完结</code></pre>
+  <p><strong>Mermaid 流程图（仅 ASCII 描线）</strong>：</p>
+  <pre class="ascii">
+    [D1 需求评审] ──► [D2-D3 功能用例] ──► [D4-D5 接口调试]
+            │                    │                    │
+            ▼                    ▼                    ▼
+   XMind 业务脑图         150 条用例 + 18 bug     Postman 40 用例
+            │                    │                    │
+            └─────────── M1 功能 + 接口 ──────────────┘
+                                       │
+                                       ▼
+            [D6-D8 接口+UI 双自动化] ──► [D9 CI 接入]
+                       │                       │
+                       ▼                       ▼
+            pytest+Playwright 80+ 用例     GitHub Actions 绿勾
+            + UI 12 场景                   + Allure 报告
+                       │                       │
+                       └───── M2 双自动化+CI ──┘
+                                  │
+                                  ▼
+            [D10-D11 性能压测] ──► [M4 D12-D13 mall-ai]
+                       │                       │
+                       ▼                       ▼
+            Locust 3 场景 + 调优       LLM-as-Judge
+                       │                       │
+                       └────── M3 + M4 ────────┘
+                                       │
+                                       ▼
+            [D14+ 简历 v3 + 投递]    ←─── M2 起并行启动
+                       │
+                       ▼
+            3 GitHub 仓库 + 简历 v3 + 投递 10-15 家
+                       │
+                       ▼
+                       M5</pre>
+
+  <h2 id="sec3">3. 七大阶段速查表（本课核心交付物）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> 第四章 D1-D14 + 第九章阶段→简历对照表。<strong>这张表是本课的核心交付物</strong>——遇到"今天该干什么"先查这张表。</p>
+  <table>
+    <thead>
+      <tr><th>阶段</th><th>输入</th><th>动作</th><th>输出</th><th>工具</th><th>简历可写句</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>一 需求评审</strong></td>
+        <td>mall4j 业务文档 + 演示站</td>
+        <td>通读业务 → 画脑图 → 评审会议纪要</td>
+        <td>XMind 业务脑图 + 评审纪要</td>
+        <td>XMind / draw.io / 浏览器</td>
+        <td>"参与需求评审，独立完成 XX 模块测试方案设计"</td>
+      </tr>
+      <tr>
+        <td><strong>二 功能用例</strong></td>
+        <td>业务脑图 + 方法论课件</td>
+        <td>等价类 / 边界值 / 场景法 / 状态迁移设计用例 + 提 Bug + 写报告</td>
+        <td>150 条用例 + 18 缺陷 + 功能测试报告</td>
+        <td>Excel / Zentao / 禅道 / TestLink</td>
+        <td>"电商系统功能测试，编写 150 条测试用例，发现 18 个有效 Bug"</td>
+      </tr>
+      <tr>
+        <td><strong>三 接口调试</strong></td>
+        <td>mall4j Swagger（Knife4j） + Postman</td>
+        <td>调通核心接口 + 写断言 + 链路关联</td>
+        <td>Postman 用例集 40 条 + Runner 报告</td>
+        <td>Postman / Apifox / Knife4j</td>
+        <td>"接口调试与用例设计，使用 Postman 完成完整链路验证"</td>
+      </tr>
+      <tr>
+        <td><strong>四 双自动化</strong></td>
+        <td>接口脚本 + Playwright 起步</td>
+        <td>pytest+YAML+Allure 接口框架 + Playwright+POM UI 框架</td>
+        <td>接口 80+ 用例 + UI 12 场景 + Allure 报告</td>
+        <td>pytest / requests / Playwright / Allure</td>
+        <td>"基于 pytest+Playwright 搭建接口/UI 自动化框架，覆盖 80+ 接口 + 12 场景"</td>
+      </tr>
+      <tr>
+        <td><strong>五 CI 接入</strong></td>
+        <td>GitHub 仓库 + workflow 语法</td>
+        <td>写 <code>.github/workflows/api-test.yml</code> → push 触发 → Allure 报告</td>
+        <td>GitHub Actions 绿勾 + workflow 文件</td>
+        <td>GitHub Actions / Allure</td>
+        <td>"接入 GitHub Actions 实现 push 触发自动执行 + Allure 报告"</td>
+      </tr>
+      <tr>
+        <td><strong>六 性能压测</strong></td>
+        <td>mall4j 3 个核心接口 + Locust 脚本</td>
+        <td>写 locustfile.py → 阶梯加压 → 定位瓶颈 → 调优复测</td>
+        <td>3 场景压测报告 + 调优前后对比</td>
+        <td>Locust / wrk / Jmeter（了解）</td>
+        <td>"使用 Locust 做性能测试，覆盖登录/查询/下单 3 场景，输出 TPS/P99/瓶颈分析报告"</td>
+      </tr>
+      <tr>
+        <td><strong>七 报告 + 简历</strong></td>
+        <td>阶段一到六全部产出物</td>
+        <td>写功能测试报告 + 性能报告 + 简历 v3 + 建 3 个 GitHub 仓库</td>
+        <td>2 份 PDF 报告 + 简历 v3 + 3 仓库绿勾</td>
+        <td>GitHub / Markdown / Typora</td>
+        <td>"3 个开源测试项目，GitHub star 可查，4 件套 + AI 亮点完整覆盖"</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>用法</strong>：每个阶段的"动作"列就是当天的 5h 时间块分配；"输出"列就是完成标志；"简历可写句"列就是阶段达标后<strong>直接拷贝到简历</strong>的句子。</p>
+
+  <h2 id="sec4">4. 阶段一：需求评审与脑图（XMind + 评审会议纪要）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D1 + <code>CONTEXT.md</code> 第 19-25 行（七模块）。</p>
+  <h3>4.1 输入清单</h3>
+  <ul>
+    <li><code>mall4j/doc/2-环境搭建/1-30分钟启动路线.md</code>（启动步骤清单）</li>
+    <li><code>mall4j/doc/1-项目概览/1-项目介绍.md</code>（业务定位）</li>
+    <li>mall4j 演示站 <code>mall4j.com</code>（视觉化浏览业务）</li>
+    <li>mall4j Swagger <code>http://localhost:8086/doc.html</code>（接口清单）</li>
+  </ul>
+  <h3>4.2 动作分解（5h 时间块）</h3>
+  <ul>
+    <li><strong>1h</strong>：读启动文档，配 JDK17 + Maven + Node + MySQL + Redis + IDEA</li>
+    <li><strong>1h</strong>：docker-compose 拉起 admin（:8085）+ api（:8086），或用 mall4j 演示站 + Swagger</li>
+    <li><strong>1h</strong>：浏览业务主链路，XMind 画脑图（七模块 × 核心接口 × 三流归属）</li>
+    <li><strong>1h</strong>：评审会议纪要模板（参与角色、议题、决议、风险）</li>
+    <li><strong>1h</strong>：写"测试方案设计"——每个模块列 3+ 可测点（第 3 课方法）</li>
+  </ul>
+  <h3>4.3 输出物</h3>
+  <ul>
+    <li><strong>XMind 业务脑图</strong>（1 份 .xmind 或 PDF 截图）</li>
+    <li><strong>评审会议纪要</strong>（1 份 .md，包含 5 大模块的测试范围与风险）</li>
+    <li><strong>环境就绪检查单</strong>（admin/api 都跑通，截图各 1 张）</li>
+  </ul>
+  <h3>4.4 风险降级</h3>
+  <p>环境卡住 → 用 mall4j 演示站 + Swagger 接口定义（测试岗真实工作常态，<strong>不需要真的能跑起来</strong>）。来源：<code>PROJECT_TARGET_BOOK.md</code> 7.1。</p>
+  <div class="interview">
+    <div class="who">简历可写句</div>
+    参与需求评审，独立完成商品、订单、会员模块的测试方案设计，使用 Xmind 梳理业务流程，编写功能测试用例 150 条，覆盖等价类/边界值/场景法，发现有效缺陷 18 个。
+  </div>
+
+  <h2 id="sec5">5. 阶段二：功能用例与缺陷（Excel/Zentao + 150 条 + 18 bug）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D2-D3 + 第五章 5.1 数字 ×2 原则。</p>
+  <h3>5.1 输入清单</h3>
+  <ul>
+    <li><code>2026AI+软件测试第一篇课件/func-day01金融web项目 ~ func-day03金融Web项目</code>（用例方法论）</li>
+    <li>阶段一产出的 XMind 脑图</li>
+    <li>mall4j 七模块：商品 / 购物车 / 订单 / 支付 / 会员 / 权限 / 统计</li>
+  </ul>
+  <h3>5.2 动作分解（5h × 2 天 = 10h）</h3>
+  <table>
+    <thead><tr><th>时段</th><th>任务</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td>D2 第 1h</td><td>扫 func-day01-03 测试方法论</td><td>用例设计模板</td></tr>
+      <tr><td>D2 第 2-3h</td><td>登录 / 注册模块（等价类 + 边界值 + 场景法）</td><td>40 条</td></tr>
+      <tr><td>D2 第 4h</td><td>商品模块（搜索 / 筛选 / 详情 / SKU）</td><td>30 条</td></tr>
+      <tr><td>D2 第 5h</td><td>购物车模块</td><td>20 条</td></tr>
+      <tr><td>D3 第 1h</td><td>订单 / 支付模块</td><td>25 条</td></tr>
+      <tr><td>D3 第 2h</td><td>会员 / 权限模块</td><td>15 条</td></tr>
+      <tr><td>D3 第 3h</td><td>兼容性 / 异常场景</td><td>20 条</td></tr>
+      <tr><td>D3 第 4h</td><td>整理缺陷清单（演示站操作 + 脑补业务漏洞）</td><td>缺陷 × 18</td></tr>
+      <tr><td>D3 第 5h</td><td>输出功能测试报告（Word / PDF）</td><td>报告 1 份</td></tr>
+    </tbody>
+  </table>
+  <h3>5.3 输出物</h3>
+  <ul>
+    <li><strong>测试用例集</strong>（150 条，按模块拆分）</li>
+    <li><strong>缺陷清单</strong>（18 条，每条含：标题、严重程度、复现步骤、预期 / 实际、截图）</li>
+    <li><strong>功能测试报告</strong>（1 份 PDF，含：测试范围、用例分布、缺陷分布、覆盖率统计、风险提示）</li>
+  </ul>
+  <h3>5.4 数字纪律（来源：第五章 5.1）</h3>
+  <p><strong>所有数字严格按实际产出 ×1 写，简历上 ×2 不超过。</strong> 真实做了 150 条，简历写 150 条（<strong>已经顶到上限</strong>）。如果实际只做了 100 条，简历不能写 200，只能写 100~150。</p>
+  <div class="interview">
+    <div class="who">简历可写句</div>
+    电商系统功能测试，编写 150 条测试用例（等价类/边界值/场景法/状态迁移），覆盖商品/购物车/订单/支付/会员 5 大模块，发现 18 个有效 Bug 并输出功能测试报告。
+  </div>
+
+  <h2 id="sec6">6. 阶段三：接口调试与链路（Postman + 40 用例）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D4-D5 + <code>05 接口测试视频/day01-day04</code>。</p>
+  <h3>6.1 输入清单</h3>
+  <ul>
+    <li><code>05 接口测试视频配套资料/05-接口测试-第01天 ~ 第04天</code>（URL/HTTP/接口文档）</li>
+    <li>mall4j Swagger（Knife4j）：<code>http://localhost:8086/doc.html</code></li>
+    <li>Postman（环境变量 + 断言 + 前置脚本 + 关联）</li>
+  </ul>
+  <h3>6.2 动作分解（5h × 2 天 = 10h）</h3>
+  <table>
+    <thead><tr><th>时段</th><th>任务</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td>D4 第 1h</td><td>扫 day01（URL / HTTP / 接口文档）</td><td>HTTP 笔记</td></tr>
+      <tr><td>D4 第 2-3h</td><td>打开 Swagger，熟悉核心接口</td><td>接口清单 × 50</td></tr>
+      <tr><td>D4 第 4h</td><td>装 Postman，配置环境变量</td><td>Postman 就绪</td></tr>
+      <tr><td>D4 第 5h</td><td>写登录 / 商品列表接口用例</td><td>20 条 Postman 用例</td></tr>
+      <tr><td>D5 第 1h</td><td>学 day02-03（断言 + 前置脚本 + 关联）</td><td>技巧清单</td></tr>
+      <tr><td>D5 第 2-3h</td><td>写"登录 → 加购 → 下单 → 支付"完整链路</td><td>关联用例 × 10</td></tr>
+      <tr><td>D5 第 4h</td><td>鉴权 / 异常 / 边界用例</td><td>10 条</td></tr>
+      <tr><td>D5 第 5h</td><td>Postman Runner 批量执行 + 报告</td><td>报告 1 份</td></tr>
+    </tbody>
+  </table>
+  <h3>6.3 输出物</h3>
+  <ul>
+    <li><strong>Postman 用例集</strong>（40 条 + 1 个完整链路）</li>
+    <li><strong>Postman Runner 报告</strong>（批量执行截图 + HTML 报告）</li>
+    <li><strong>接口清单</strong>（50 条核心接口的请求方式 / 参数 / 响应字段）</li>
+  </ul>
+  <h3>6.4 技能缺口速补（来源：5.5）</h3>
+  <ul>
+    <li><strong>Apifox</strong>：导入 mall4j Swagger 调 3 个接口，0.5 天 → 简历写"熟悉"</li>
+    <li><strong>Fiddler 抓包 / 弱网</strong>：第一篇 <code>func-day06测试辅助</code> 0.5 天 → 简历写"熟悉"</li>
+  </ul>
+  <div class="interview">
+    <div class="who">简历可写句</div>
+    接口调试与用例设计，使用 Postman + Swagger（Knife4j）完成 40 条接口用例与"登录→加购→下单→支付"完整链路验证，覆盖鉴权/CRUD/异常/边界场景。
+  </div>
+
+  <h2 id="sec7">7. 阶段四：双自动化（pytest + Playwright + 80+ 接口 + 12 UI 场景）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D6-D8 + 7.2 风险预案 + 8.3 Selenium→Playwright 迁移规则。</p>
+  <h3>7.1 输入清单</h3>
+  <ul>
+    <li><code>2026AI+软件测试第二篇课件/python_day01_pytest框架</code>（pytest 基础）</li>
+    <li><code>2026AI+软件测试第二篇课件/day06_web自动化 ~ day10_web自动化</code>（<strong>Selenium 教学，按 8.3 迁移到 Playwright</strong>）</li>
+    <li>阶段三的 Postman 用例集（接口自动化起点）</li>
+  </ul>
+  <h3>7.2 动作分解（5h × 3 天 = 15h）</h3>
+  <table>
+    <thead><tr><th>时段</th><th>任务</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td>D6 第 1h</td><td>Python 基础速览（已会则跳）</td><td>—</td></tr>
+      <tr><td>D6 第 2h</td><td>装 pytest + requests + allure，写第一个登录用例</td><td>脚本跑通</td></tr>
+      <tr><td>D6 第 3-5h</td><td>封装 base_api（鉴权 / 请求 / 日志）</td><td>base 模块</td></tr>
+      <tr><td>D7 第 1h</td><td>学 day06-07 概念层（8 种定位 / 显式隐式等待）</td><td>概念迁移笔记</td></tr>
+      <tr><td>D7 第 2h</td><td>接口框架：common / base_api + data / yaml + testcases + reports</td><td>目录结构</td></tr>
+      <tr><td>D7 第 3h</td><td>接入 YAML 数据驱动 + allure</td><td>allure 生成</td></tr>
+      <tr><td>D7 第 4h</td><td>UI 自动化起步：playwright install + 写第一个登录 UI 用例</td><td>playwright 脚本</td></tr>
+      <tr><td>D7 第 5h</td><td>跑通接口登录 + 商品 + 订单全链路</td><td>1 个完整场景</td></tr>
+      <tr><td>D8 第 1h</td><td>学 day08-10 POM 分层结构</td><td>POM 模板</td></tr>
+      <tr><td>D8 第 2-3h</td><td>UI 自动化：搭建 POM 框架，覆盖 6 模块 12 场景</td><td>UI 框架 + 12 场景</td></tr>
+      <tr><td>D8 第 4h</td><td>接口自动化：补全用例至 80+ 接口</td><td>80+ 接口用例</td></tr>
+      <tr><td>D8 第 5h</td><td>接口 + UI 都跑一遍，看 Allure 报告</td><td>报告截图</td></tr>
+    </tbody>
+  </table>
+  <h3>7.3 输出物</h3>
+  <ul>
+    <li><strong>接口自动化框架</strong>（pytest + requests + YAML + Allure + base_api）</li>
+    <li><strong>接口用例集</strong>（80+ 条：鉴权 / CRUD / 异常 / 参数化 / 边界全覆盖）</li>
+    <li><strong>UI 自动化框架</strong>（Playwright + POM：page / base / testcase / common / data 五层）</li>
+    <li><strong>UI 用例集</strong>（12 场景：登录 / 商品管理 / 订单管理 / 购物车 / 搜索 / 会员）</li>
+    <li><strong>Allure 报告</strong>（HTML + JSON + 截图）</li>
+  </ul>
+  <h3>7.4 框架分层（POM 五层，来源：8.3 迁移规则）</h3>
+  <pre><code>mall4j-auto-test/
+├── common/         # base_api + 日志 + 配置
+├── data/           # YAML 用例数据
+├── page/           # POM 页面对象（page_login / page_order ...）
+├── testcase/       # pytest 用例（test_api_login / test_ui_order ...）
+├── reports/        # Allure 报告
+└── conftest.py     # pytest fixture（登录态 / 数据库连接）</code></pre>
+  <div class="interview">
+    <div class="who">简历可写句</div>
+    基于 pytest + requests + YAML + Allure 搭建接口自动化框架，覆盖 80+ 核心接口（鉴权/CRUD/异常/参数化/边界）；基于 Playwright + POM 模式搭建 Web UI 自动化框架，实现 12 个核心场景（登录/商品管理/订单管理/购物车/搜索/会员）的自动化回归。
+  </div>
+  <h3>7.5 面试加分项</h3>
+  <ul>
+    <li>课程教的是 Selenium，对照迁移到了 Playwright——<strong>两者的定位体系、等待机制、POM 思想相通</strong>，Playwright 的自动等待和 <code>expect</code> 断言更现代，flaky 率更低。</li>
+    <li>主动做技术迁移 = 学习能力的活展示。</li>
+  </ul>
+
+  <h2 id="sec8">8. 阶段五：CI 接入（GitHub Actions + Allure）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D9 + <code>第二篇/day11_Git及持续集成</code>。</p>
+  <h3>8.1 输入清单</h3>
+  <ul>
+    <li>阶段四的双自动化框架（已跑通 Allure）</li>
+    <li><code>2026AI+软件测试第二篇课件/day11_Git及持续集成</code>（GitHub Actions 概念）</li>
+    <li>一个 GitHub 仓库（建议 Day 14 统一建仓，本阶段可以先用临时仓库验证）</li>
+  </ul>
+  <h3>8.2 动作分解（5h）</h3>
+  <table>
+    <thead><tr><th>时段</th><th>任务</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td>第 1h</td><td>学 GitHub Actions 基础</td><td>workflow 语法</td></tr>
+      <tr><td>第 2-3h</td><td>写 <code>.github/workflows/api-test.yml</code>：push 触发 → 跑 pytest + playwright → 上传 Allure</td><td>workflow 文件</td></tr>
+      <tr><td>第 4h</td><td>推 GitHub，跑通 CI</td><td>绿勾截图</td></tr>
+      <tr><td>第 5h</td><td>修 case + 补 README + 截图</td><td>仓库完整</td></tr>
+    </tbody>
+  </table>
+  <h3>8.3 workflow 最小骨架</h3>
+  <pre><code>name: API + UI Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: playwright install --with-deps chromium
+      - run: pytest testcase/ --alluredir=reports/
+      - uses: simple-elf/allure-report-action@master
+        if: always()
+        with:
+          allure_results: reports</code></pre>
+  <h3>8.4 输出物</h3>
+  <ul>
+    <li><strong><code>.github/workflows/api-test.yml</code></strong>（workflow 文件）</li>
+    <li><strong>GitHub Actions 绿勾截图</strong>（CI 跑通的证据）</li>
+    <li><strong>Allure 报告在线预览</strong>（actions artifact 下载链接）</li>
+  </ul>
+  <div class="interview">
+    <div class="who">简历可写句</div>
+    接入 GitHub Actions 实现 push 触发自动执行 pytest + Playwright 用例，自动生成并归档 Allure 报告，CI 全程绿勾。
+  </div>
+
+  <h2 id="sec9">9. 阶段六：性能压测（Locust + 3 场景 + 调优复测对比）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D10-D11 + <code>07 性能测试4_8_31/性能测试第一天笔记 ~ 第四天笔记</code>。</p>
+  <h3>9.1 输入清单</h3>
+  <ul>
+    <li>mall4j 三个核心接口：登录 / 商品列表 / 下单</li>
+    <li><code>07 性能测试4_8_31/性能测试第一天笔记.pdf</code>（Locust 入门）</li>
+    <li><code>07 性能测试4_8_31/性能测试第二天笔记.pdf</code>（阶梯加压 + 监控）</li>
+  </ul>
+  <h3>9.2 动作分解（5h × 2 天 = 10h）</h3>
+  <table>
+    <thead><tr><th>时段</th><th>任务</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td>D10 第 1h</td><td>扫性能测试第一天笔记</td><td>性能基础笔记</td></tr>
+      <tr><td>D10 第 2h</td><td>装 Locust + 看 mall4j 的 3 个核心接口</td><td>接口清单</td></tr>
+      <tr><td>D10 第 3-4h</td><td>写 <code>locustfile.py</code>：登录场景（@task 权重分配 + wait_time + on_start 钩子）</td><td>脚本 1</td></tr>
+      <tr><td>D10 第 5h</td><td>本地启动 mall4j → Locust Web UI 跑 100 用户，看 TPS / P99 / 错误率</td><td>登录压测报告</td></tr>
+      <tr><td>D11 第 1h</td><td>学性能测试第二天（阶梯加压 + 监控）</td><td>技巧</td></tr>
+      <tr><td>D11 第 2-3h</td><td>写商品查询 + 下单两个 Locust 脚本（GET / POST + 参数化用户）</td><td>脚本 2 + 3</td></tr>
+      <tr><td>D11 第 4h</td><td>阶梯加压（50 / 100 / 200 / 500 并发），看 TPS 拐点和 P99 退化曲线</td><td>3 场景压测数据</td></tr>
+      <tr><td>D11 第 5h</td><td>调优复测（线程池 / 连接池 / SQL 索引 / 缓存 四选一）+ 复测对比</td><td>调优前后对比</td></tr>
+      <tr><td>D11 第 6h</td><td>写完整性能测试报告（TPS 表格 + 瓶颈分析 + 调优对比 + 优化建议）</td><td>报告 PDF</td></tr>
+    </tbody>
+  </table>
+  <h3>9.3 输出物</h3>
+  <ul>
+    <li><strong>3 个 Locust 脚本</strong>（登录 / 查询 / 下单）</li>
+    <li><strong>3 场景压测报告</strong>（TPS / P99 / 错误率 / 拐点）</li>
+    <li><strong>调优前后对比数据</strong>（瓶颈定位 + 优化方案 + 复测数据）</li>
+    <li><strong>完整性能测试报告</strong>（PDF，含结论与建议）</li>
+  </ul>
+  <h3>9.4 风险降级（来源：7.3）</h3>
+  <p>Locust 脚本与 mall4j 鉴权机制不匹配时：</p>
+  <ul>
+    <li>登录场景必做（最容易跑通）</li>
+    <li>商品查询 / 下单如果鉴权卡住 → <strong>降级做"未鉴权压测"</strong> + 报告里<strong>写明限制</strong></li>
+    <li>面试话术："鉴权压测的脚本也写了，待接入"</li>
+  </ul>
+  <div class="interview">
+    <div class="who">简历可写句</div>
+    使用 Locust 对登录、商品查询、下单 3 个核心接口做压测，覆盖 50-500 并发阶梯加压，输出 TPS/P99/错误率数据；针对 TOP1 瓶颈完成一轮调优（SQL 索引/连接池 四选一），输出复测对比报告与优化建议。
+  </div>
+
+  <h2 id="sec10">10. 阶段七：报告与简历（3 仓库 + 简历 6 句）</h2>
+  <p>来源：<code>PROJECT_TARGET_BOOK.md</code> D14 + 第五章 5.1-5.4 + 第六章 6.2。</p>
+  <h3>10.1 输入清单</h3>
+  <ul>
+    <li>阶段一到六的全部产出物</li>
+    <li><code>senior-resume.pdf</code>（学长对标简历骨架，来源：5.5）</li>
+    <li>三个 GitHub 仓库（M2 即可建，M5 持续维护）</li>
+  </ul>
+  <h3>10.2 动作分解（5h）</h3>
+  <table>
+    <thead><tr><th>时段</th><th>任务</th><th>输出</th></tr></thead>
+    <tbody>
+      <tr><td>第 1h</td><td>GitHub 建仓 <code>mall4j-test-practice</code>（测试用例 + 报告）</td><td>仓库 1</td></tr>
+      <tr><td>第 1h</td><td>GitHub 建仓 <code>mall4j-auto-test</code>（接口 + UI 自动化 + CI + 压测脚本）</td><td>仓库 2</td></tr>
+      <tr><td>第 1h</td><td>GitHub 建仓 <code>agent-eval-practice</code>（Agent 评测方法论 + 用例）</td><td>仓库 3（M4 后填内容）</td></tr>
+      <tr><td>第 1h</td><td>写完整简历 v3（4 件套 + AI 亮点 + 2 个项目 STAR 法则）</td><td>简历 v3</td></tr>
+      <tr><td>第 1h</td><td>准备 3 个面试高频问题答案（6.1） + 投递 10-15 家</td><td>投递完成</td></tr>
+    </tbody>
+  </table>
+  <h3>10.3 简历 6 句核心话术（来源：5.3-5.4）</h3>
+  <blockquote>
+    <ol>
+      <li><em>电商系统功能测试，编写测试用例 150 条（等价类/边界值/场景法/状态迁移），覆盖商品/购物车/订单/支付/会员 5 大模块，发现有效 Bug 18 个，输出功能测试报告。</em></li>
+      <li><em>接口调试与用例设计，使用 Postman + Swagger（Knife4j）完成 40 条接口用例与"登录→加购→下单→支付"完整链路验证。</em></li>
+      <li><em>基于 pytest + requests + YAML + Allure 搭建接口自动化框架，覆盖 80+ 核心接口（鉴权/CRUD/异常/参数化/边界）。</em></li>
+      <li><em>基于 Playwright + POM 模式搭建 Web UI 自动化框架，实现 12 个核心场景的自动化回归。</em></li>
+      <li><em>接入 GitHub Actions 实现 push 触发自动执行 pytest + Playwright 用例，自动生成并归档 Allure 报告。</em></li>
+      <li><em>使用 Locust 对登录/查询/下单 3 个核心接口做压测，覆盖 50-500 并发阶梯加压，输出 TPS/P99 报告 + 一轮调优复测对比 + 优化建议。</em></li>
+    </ol>
+  </blockquote>
+  <h3>10.4 数字 ×2 红线（来源：5.1）</h3>
+  <p><strong>所有数字严格 ×1 写（已等于实际产出），×2 是上限。</strong> 真实做了 150 条 / 80+ 接口 / 12 场景 / 18 bug → 简历直接写这些数字（<strong>这是上限，不是 ×2 后</strong>）。</p>
+  <h3>10.5 三个 GitHub 仓库必备</h3>
+  <ul>
+    <li>README（<strong>按简历包装的口径写</strong>）</li>
+    <li>项目截图（Allure 报告 / Locust 报告 / CI 绿勾）</li>
+    <li>清晰目录结构</li>
+    <li>提交记录（<strong>真实有效，不是空 commit</strong>）</li>
+  </ul>
+
+  <h2 id="sec11">11. M4 预告：mall-ai Agent 评测（LLM-as-Judge）</h2>
+  <p>本课是 5 课系列的<strong>收官</strong>，但项目整体还没结束。<strong>M4（mall-ai 实测）</strong> 是双非 + 零实习背景下 2026 最稀缺的差异化亮点，独立仓库 <code>agent-eval-practice</code>，D12-D13 完成。本节是预告，详细教学留到 M4 启动时。</p>
+  <h3>11.1 任务总览（来源：PROJECT_TARGET_BOOK D12-D13）</h3>
+  <ul>
+    <li><strong>本地部署</strong>：docker-compose 拉起 MySQL / Chroma / RabbitMQ + 后端 + 前端</li>
+    <li><strong>LLM 接入</strong>：配置 API Key（DeepSeek / 通义 / 智谱均可，国内可直连低价 Key）</li>
+    <li><strong>4 核心场景</strong>：开放任务 / 政策 RAG / 工具调用 / 写库关卡</li>
+    <li><strong>50 条 Agent 用例</strong>：每场景 12-13 条，覆盖正常 / 异常 / 边界 / 对抗 4 类</li>
+    <li><strong>4 维度评测</strong>：事实性 / 工具选择率 / 拒答率 / 幻觉率</li>
+    <li><strong>LLM-as-Judge</strong>：用大模型当裁判，自动评估输出质量</li>
+  </ul>
+  <h3>11.2 风险预案（来源：7.4）</h3>
+  <ol>
+    <li>前置：先读 <code>docker-compose.yml</code> + 部署文档</li>
+    <li>LLM API Key：评测必须调模型，<strong>降级方案 = 平台跑通 + 规则类指标评测 + LLM-as-Judge 脚本待接入</strong></li>
+    <li>单服务起不来：按报错逐项排查</li>
+    <li>终极降级：回退"只读不跑"（<code>evaluation.md</code> + <code>evals/v3</code> 用例仍完整）</li>
+  </ol>
+  <div class="interview">
+    <div class="who">简历可写句（M4 完成后）</div>
+    基于 docker-compose 独立部署 mall-ai 电商售后智能 Agent 平台（MySQL/Chroma/RabbitMQ + 前后端），配置 LLM 接入并完成 4 个核心场景冒烟；编写 50 条 Agent 测试用例（正常/异常/边界/对抗），落地 LLM-as-Judge 评分脚本并实跑，输出事实性/工具选择率/拒答率/幻觉率 4 维度评测报告。
+  </div>
+
+  <h2 id="sec12">12. 下一步：进入 D1 启动 mall4j + 课堂小测</h2>
+  <p>本课是 5 课系列<strong>收官</strong>——你已经讲清楚：</p>
+  <ul>
+    <li><strong>业务</strong>（第 1 课）：mall4j 是什么、三端架构、五流贯通、七模块、主链路。</li>
+    <li><strong>流 + 状态机</strong>（第 2 课）：一笔订单的钱 / 消息 / 物件同步前进 + 6 状态 9 条迁移。</li>
+    <li><strong>模块边界 + 可测点</strong>（第 3 课）：两套后端各管各的 + 每模块 3+ 可测点。</li>
+    <li><strong>用例方法论</strong>（第 4 课）：等价类 / 边界值 / 场景法 / 状态迁移四种方法按模块选配。</li>
+    <li><strong>端到端流程</strong>（第 5 课）：七大阶段速查表 + 每阶段输入 / 动作 / 输出 / 工具 / 简历话术。</li>
+  </ul>
+  <h3>12.1 D1 启动清单（打开 <code>feature_list.json</code> 把 M1-D1-001 状态改 <code>in_progress</code>）</h3>
+  <ol>
+    <li>读 <code>mall4j/doc/2-环境搭建/1-30分钟启动路线.md</code>（M1-D1-001 第一个子任务）</li>
+    <li>配 JDK17 + Maven + Node + MySQL + Redis + IDEA</li>
+    <li>docker-compose 或本地启动 admin（<code>yami-shop-admin</code>，端口 8085）+ api（<code>yami-shop-api</code>，端口 8086）</li>
+    <li>浏览器访问 <code>http://localhost:8085</code> 验证后台可登录，<code>http://localhost:8086/doc.html</code> 验证 Swagger 可访问</li>
+    <li>打开 XMind 画七模块业务脑图（按第 1 课"七大模块速查"）</li>
+    <li>完成上述后改 <code>status: done</code> + 填 <code>evidence</code>（按 <code>progress.md</code> 证据链格式追加一行）</li>
+  </ol>
+  <h3>12.2 本课 win 验证</h3>
+  <p>你能 5 分钟内画出本课第 2 节的端到端流程图（或第 3 节的七大阶段速查表），并说出每步的输入 / 输出——这就是 Mission 锚点"让用户能用一张图讲清 14 天做了什么、每一步产出什么"。</p>
+  <h3>12.3 M5 投递节奏提醒（来源：6.3）</h3>
+  <p><strong>M2 达标即投日常实习，不等完美</strong>。秋招 2026-09~11 / 春招 2027-02~04 节点自然对齐。</p>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（七大阶段速查表 / 框架分层 / Selenium→Playwright 迁移 / Locust 脚本 / M4 评测维度 / 数字 ×2 红线）抛给你的 AI 教师追问——单点困惑往往牵出一整条交付链，问得越具体，回答越能反哺你的测开作品集。
+  </div>
+
+  <h2>课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>14 天里程碑驱动完整版（v3.0）下，"最低可投状态"是哪个里程碑完成即开始投递？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) M1 完成（150 条功能用例 + 18 缺陷 + 报告 + Postman 40 条）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) M2 完成（接口 80+ + UI 12 场景 + GitHub Actions 绿勾）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) M3 完成（Locust 3 场景压测 + 调优复测报告）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) M5 完成（3 仓库 + 简历 v3 + 投递完成）</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>接口自动化与 UI 自动化框架的关键分层差异，下列说法正确的是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 接口框架用 POM 五层结构，UI 框架用 base_api + data/yaml 二层结构</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 接口框架用 base_api + data/yaml + testcases + reports 结构，UI 框架用 POM 五层 page/base/testcase/common/data 结构</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 两个框架都用 base_api + data/yaml 二层结构以保持代码风格统一</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 两个框架都用 POM 五层结构以保持代码风格统一便于后续维护</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>课程 Selenium 教学迁移到 Playwright 的核心策略，下列说法最准确的是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 完整复制 Selenium 代码到 Playwright 项目只换 import 名称即可</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 课程代码全部跳过只看视频学概念实现全部用 Playwright 落地</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 概念全学实现全换，POM 分层结构照搬驱动层用 Playwright 重写</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 只学 Playwright 不学 Selenium 课程以免技术栈混淆影响后续面试表达</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0004-test-design-methods.html">第 4 课 测试用例设计方法论</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../../doc/2-环境搭建/1-30分钟启动路线.md">这是最后一课，建议立即进入 D1 启动 mall4j</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0005-lifecycle-cheatsheet.html">测试开发全流程速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0005-lifecycle-cheatsheet.html">测试开发全流程速查卡（reference/0005-lifecycle-cheatsheet.html）</a></li>
+      <li><a href="../../doc/2-环境搭建/1-30分钟启动路线.md">doc/2-环境搭建/1-30分钟启动路线.md</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M1-D1-001 起步）</a></li>
+    </ul>
+    <div>系列收官 🎉——5 课教学完成，业务理解阶段 Mission 全部达成，下一阶段进入 M1-D1 实操启动。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=B(1), Q3=C(2) ===
+  var correctMap = { q1: '1', q2: '1', q3: '2' };
+
+  var chapterHint = {
+    q1: { href: '#sec2', text: '回到第 2 节：再读"端到端流程图"的 M2 最低可投门禁' },
+    q2: { href: '#sec7', text: '回到第 7 节：再读"双自动化"的框架分层小节' },
+    q3: { href: '#sec7', text: '回到第 7 节：再读"双自动化"7.5 面试加分项' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

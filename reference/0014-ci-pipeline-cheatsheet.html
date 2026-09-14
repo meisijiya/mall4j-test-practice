@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>CI 流水线速查卡 · 第 14 课 · GitHub Actions</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    @media print {
+      body { font-size: 10pt; }
+      section.card { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3 { color: #000; }
+      pre { font-size: 8.5pt; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>CI 流水线速查卡 · GitHub Actions</h1>
+    <p class="meta">第 14 课 · A4 打印友好 · workflow 骨架 + services 块 + 9 steps + 5 secrets + 6 fix + 3 降级 + 本地模拟</p>
+  </header>
+  <main>
+    <section class="card">
+      <h2>1. workflow 最小骨架（api-test.yml）</h2>
+      <p>来源：<code>.github/workflows/api-test.yml</code></p>
+      <pre><code>name: API Test Pipeline
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      RUN_UI:
+        type: choice
+        options: ["0", "1"]
+        default: "0"
+jobs:
+  test_api:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4</code></pre>
+      <p class="hint"><strong>触发</strong>：push / PR 自动跑；手动 dispatch 走 RUN_UI=1 触发 UI 链路。AGPLv3 边界 100% 守：workflow 不动本体源码，依赖 <code>target/*.jar</code> 预编译产物。</p>
+    </section>
+
+    <section class="card">
+      <h2>2. services 块（MySQL8 + Redis7）</h2>
+      <p>docker-compose 风格但写在 workflow 内，runner 自动起容器。</p>
+      <pre><code>services:
+  mysql:
+    image: mysql:8.0.33
+    env:
+      MYSQL_ROOT_PASSWORD: ${{ secrets.MALL4J_DB_ROOT_PASSWORD }}
+      MYSQL_DATABASE: ${{ secrets.MALL4J_DB_NAME }}
+    ports: [3306:3306]
+    options: >-
+      --health-cmd="mysqladmin ping"
+      --health-interval=10s
+      --health-retries=5
+  redis:
+    image: redis:7.2-alpine
+    ports: [6379:6379]
+    options: --health-cmd="redis-cli ping" --health-interval=10s</code></pre>
+      <p class="hint"><strong>健康检查</strong>：MySQL 等 <code>mysqladmin ping</code> 通才进 step；Redis <code>redis-cli ping</code> → PONG。超时默认 30s，retry 5 次后挂。</p>
+    </section>
+
+    <section class="card">
+      <h2>3. 9 steps 速查</h2>
+      <table>
+        <thead><tr><th>#</th><th>动作</th><th>关键参数</th></tr></thead>
+        <tbody>
+          <tr><td><strong>1</strong></td><td>checkout</td><td><code>actions/checkout@v4</code></td></tr>
+          <tr><td><strong>2</strong></td><td>setup-java17</td><td><code>temurin</code> + <code>cache: maven</code></td></tr>
+          <tr><td><strong>3</strong></td><td>setup-python3.11</td><td><code>cache: pip</code> + <code>cache-dependency-path: requirements.txt</code></td></tr>
+          <tr><td><strong>4</strong></td><td>cache playwright</td><td>仅 RUN_UI=1 命中（<code>~/.cache/ms-playwright</code>）</td></tr>
+          <tr><td><strong>5</strong></td><td>灌 DDL + seed</td><td><code>mysql &lt; yami_shop.sql</code> + seed-data.sql</td></tr>
+          <tr><td><strong>6</strong></td><td>mvn 编译</td><td><code>-B -pl yami-shop-api -am package -DskipTests</code></td></tr>
+          <tr><td><strong>7</strong></td><td>java -jar &amp; 启服务</td><td><code>nohup ... &amp;</code> + curl 探活 60s</td></tr>
+          <tr><td><strong>8</strong></td><td>pip install</td><td><code>requirements.txt + cryptography + pycryptodome</code></td></tr>
+          <tr><td><strong>9</strong></td><td>pytest + allure + upload</td><td><code>-m "not ui"</code> + <code>awesomecode/allure-action@v1</code> + <code>upload-artifact@v4</code></td></tr>
+        </tbody>
+      </table>
+      <p class="hint"><strong>step 7 探活</strong>：循环 <code>curl -fsS http://localhost:8085/admin/login</code> 等 200，每 5s 重试，60s 内未起则 step 失败退出。</p>
+    </section>
+
+    <section class="card">
+      <h2>4. 5 个 secrets 清单</h2>
+      <p>Settings → Secrets and variables → Actions 配置：</p>
+      <ul>
+        <li><code>MALL4J_DB_ROOT_PASSWORD</code> — MySQL root 密码（灌 DDL 用）</li>
+        <li><code>MALL4J_DB_NAME</code> — 数据库名（默认 yami_shop）</li>
+        <li><code>MALL4J_DB_USER</code> — 应用账号</li>
+        <li><code>MALL4J_DB_PASSWORD</code> — 应用密码（java -jar 用 SPRING_DATASOURCE_PASSWORD 覆盖）</li>
+        <li><code>MALL4J_REDIS_PASSWORD</code> — Redis 密码</li>
+      </ul>
+      <p class="hint"><strong>注意</strong>：<code>GITHUB_TOKEN</code> 是 Actions 自动注入的，<strong>不要</strong>手动配；同理 <code>RUN_UI</code> 走 <code>workflow_dispatch.inputs</code>，不需 secret。</p>
+    </section>
+
+    <section class="card">
+      <h2>5. 6 件非显然 fix（CI 必踩的坑）</h2>
+      <ol>
+        <li><strong>skipif 顶层 load env</strong> — <code>conftest.py</code> 顶层调 <code>_load_env()</code>，否则 <code>pytest collect</code> 阶段 <code>os.getenv('PROD_ID')</code> 拿不到值 → 永远 skip。</li>
+        <li><strong>AES-ECB cryptography 双装</strong> — pip 必须显式 <code>cryptography</code> + <code>pycryptodome</code>（mall4j AES-ECB-PKCS7 兼容）。</li>
+        <li><strong>cart/order 硬编码 ID</strong> — seed-data.sql 走 <code>.github/workflows/</code>，不依赖外部 fixture。</li>
+        <li><strong>chromium 默认 RUN_UI=0</strong> — 150MB 不下，dispatch 才装（省 90% runner 流量）。</li>
+        <li><strong>allure-commandline 不在 pip</strong> — <code>awesomecode/allure-action@v1</code> 自动下二进制，不污染 Python env。</li>
+        <li><strong>CI 网络不切镜像</strong> — runner 本就快，切 <code>pypi.tuna</code> 反而慢 + 易超时。</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2>6. 降级路径 3 条</h2>
+      <table>
+        <thead><tr><th>场景</th><th>降级方案</th></tr></thead>
+        <tbody>
+          <tr><td><strong>allure-action 失败</strong></td><td>改 <code>actions/upload-artifact@v4</code> 上传 raw <code>allure-results/</code>，本地 <code>allure generate</code>。</td></tr>
+          <tr><td><strong>chromium 下载失败</strong></td><td><code>env.RUN_UI == '0'</code> 直接跳过整段 UI step，CI 仍绿。</td></tr>
+          <tr><td><strong>mvn 编译失败</strong></td><td><code>actions/download-artifact@v4</code> 拉 prebuilt jar（<code>yami-shop-api-*.jar</code>），跳过 step 6。</td></tr>
+        </tbody>
+      </table>
+      <p class="hint"><strong>失败容忍原则</strong>：CI 红 ≠ 阻塞合并；只 FAIL 在测试断言本身才 block；环境/mvn/网络层失败走降级或重试（<code>continue-on-error: true</code>）。</p>
+    </section>
+
+    <section class="card">
+      <h2>7. 本地模拟 + 月度用量</h2>
+      <p><strong>run-ci.sh 一行命令</strong>（前提：服务已启、<code>.env</code> 已配）：</p>
+      <pre><code>bash test-cases/api-auto/run-ci.sh</code></pre>
+      <p><strong>月度 runner 用量估算</strong>：</p>
+      <pre><code>30 次推送 × 3 min/次 = 90 分钟 ≤ 2000 分钟免费配额（占 4.5%）</code></pre>
+      <p><strong>关键路径速查</strong>：</p>
+      <ul>
+        <li><code>.github/workflows/api-test.yml</code> — workflow 主体</li>
+        <li><code>docs/CI.md</code> — secrets 配置 + 排错手册</li>
+        <li><code>test-cases/api-auto/run-ci.sh</code> — 本地一行复刻 CI</li>
+        <li><code>doc/3-API接口/M2-D9-001-impl-notes.md</code> — 实施笔记</li>
+      </ul>
+      <p class="hint"><strong>离线 vs CI</strong>：CI 跑全链路（MySQL + Redis + mvn + pytest + allure）；本地跑只跑 pytest（服务 + .env 由用户侧保证）。两者同源 yaml 数据驱动，零代码差。</p>
+    </section>
+  </main>
+  <footer>
+    <p class="hint">第 14 课配套速查卡 · <a href="../lessons/0014-github-actions-ci-pipeline.html">返回主课</a> · 来源：.github/workflows/api-test.yml + docs/CI.md + D9 实施笔记</p>
+  </footer>
+</body>
+</html>

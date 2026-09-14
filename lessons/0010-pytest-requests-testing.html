@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 10 课 pytest + requests 自动化——从 Postman 到 CI 友好的代码化测试</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+    /* mermaid 容器宽度（与正文一致） */
+    pre.mermaid { background: #fafafa; padding: 0.6em; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 10 课：pytest + requests 自动化——从 Postman 到 CI 友好的代码化测试</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 10 课</span>
+    <span class="tag">难度 ★★★★☆</span>
+    <span class="tag">时长 40 分钟</span>
+    <span class="tag">实战对象 M2-D6-001 pytest + requests 起步骨架 23 文件</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L09 Postman → L10 代码化）</a></li>
+      <li><a href="#sec2">为什么从 Postman 进阶到 pytest（自动化 / CI / 数据驱动 / Newman 互补）</a></li>
+      <li><a href="#sec3">23 文件速览：入口 + fixture + common + api + testcases + data + reports</a></li>
+      <li><a href="#sec4">核心概念 × 5（ApiClient 鉴权 / pluggy 陷阱 / fixture scope / allure 降级 / skip 兜底）</a></li>
+      <li><a href="#sec5">动手练：5 分钟装依赖 + collect-only 看 10 条用例</a></li>
+      <li><a href="#sec6">课堂小测 + 收官提示</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L09 Postman → L10 代码化）</h2>
+  <p>第 9 课把 20 条接口用例资产化到 Postman Collection + Environment + 2 JS + 文档——5 件产物。本课换条腿：把这 20 条用例<strong>搬到 pytest + requests 代码里</strong>，变成 CI 一键跑、可写 IDE 断点、能接 allure 报告的骨架。</p>
+  <ul>
+    <li><strong>第 9 课（Postman Collection）</strong>：5 件产物（55 KB Collection + 1.8 KB Env + 974 B + 841 B + 13 KB 文档），5 folder × 20 用例，Runner 顺序依赖。</li>
+    <li><strong>本课（pytest + requests 骨架）</strong>：<strong>23 文件</strong>分 7 层（入口 6 + conftest 1 + common 6 + api 3 + testcases 3 + data 1 + reports 1 + README 等），离线 100% 可解析，环境就绪即可跑。</li>
+    <li><strong>两课的衔接</strong>：同一份 endpoint 表（公开 8 + 登录 3 + 购物车 3 + 订单 4 + 异常 2 = 20）；Postman 适合"探索式 + UI 演示"，pytest 适合"CI + 回归 + 数据驱动"。</li>
+    <li><strong>本课的承诺</strong>：从 Postman Runner 手动点 Send 升级到 <code>pytest --collect-only</code> 看 10 条用例 + <code>pytest -v</code> 跑 5 条登录——这<strong>只是骨架</strong>，业务流断言、JSON Schema、并发、性能留到 M2-D7/D8。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    L09 = "<strong>接口用例资产化</strong>"（手点 / Newman CLI），L10 = "<strong>接口用例代码化</strong>"（pytest 跑 / IDE 写）。前者决定能不能在 Postman 里跑过；后者决定能不能在 CI 里 5 分钟重跑。
+  </div>
+
+  <h2 id="sec2">2. 为什么从 Postman 进阶到 pytest</h2>
+  <p>Postman 不是不好——它是<strong>探索</strong>工具，不够 <strong>工程</strong>。pytest + requests 把"接口用例"升级成"接口测试工程"，4 个理由：</p>
+  <table>
+    <thead><tr><th>#</th><th>理由</th><th>Postman 局限</th><th>pytest 优势</th><th>本课落地</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>自动化 / CI</strong></td>
+        <td>Runner 需人工点；Newman CLI 可接入 CI 但断言用 JS</td>
+        <td><code>bash run.sh</code> 一键跑；GitHub Actions 用 <code>pytest</code> 步骤</td>
+        <td><code>run.sh</code> 4 行：装依赖 → collect → 跑</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>IDE 友好</strong></td>
+        <td>Postman Desktop 内存大；无断点 / 调试器</td>
+        <td>PyCharm / VS Code 完整断点、变量检查、Refactor</td>
+        <td><code>common/base_api.py</code> 173 行可单步调试</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>数据驱动</strong></td>
+        <td>Runner 数据文件格式受限；CSV / JSON 转换链长</td>
+        <td><code>pytest.mark.parametrize</code> + YAML 数据文件（<code>pytest_yaml_cases</code>）</td>
+        <td><code>data/login_data.yaml</code> 5 条参数化登录</td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><strong>与 Newman 互补</strong></td>
+        <td>Postman / Newman 强在"接口链路演示"</td>
+        <td>pytest 强在"用例逻辑 + 报告 + CI"</td>
+        <td>M1-D4 演示 + M2-D6 回归 = 完整测试工程</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>MISSION.md 主线</strong>（第 9 段"用户目标"）：用户在秋招投递<strong>测试开发岗</strong>时，"pytest + requests 自动化起步"是必填项——不是会用 pytest 写 hello world，而是<strong>能交付一套 23 文件的工程骨架</strong>（入口 + fixture + common + api + testcases + data + reports），CI 接入即用。</p>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "基于 pytest + requests 设计 mall4j 接口自动化框架，覆盖登录 / 商品 / SKU / 订单 5+3+2 共 10 条 smoke + P1 用例，支持 session 级 token 复用 + YAML 数据驱动 + allure 优雅降级"——这句直接写进 M2 项目经验。
+  </div>
+
+  <h2 id="sec3">3. 23 文件速览：入口 + fixture + common + api + testcases + data + reports</h2>
+  <p>来源：<code>test-cases/api-auto/</code> 实际 23 文件（含 <code>__init__.py</code> + <code>.gitkeep</code> + <code>__pycache__</code>）。本课的"23"指<strong>手写 / 落地</strong>的文件，<strong>排除</strong> <code>__pycache__/</code> 和 <code>.gitkeep</code> 占位。</p>
+  <table>
+    <thead><tr><th>类别</th><th>路径</th><th>关键文件</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>入口（6 文件）</strong></td>
+        <td><code>api-auto/</code></td>
+        <td><code>requirements.txt</code>（pytest 8.3 / requests 2.32 / allure-pytest 2.13）+ <code>pytest.ini</code>（testpaths=./testcases / markers=p0/p1/p2）+ <code>run.sh</code>（一键安装+跑）+ <code>README.md</code>（7 节）+ <code>.env.example</code>（环境变量模板）+ <code>.gitignore</code></td>
+      </tr>
+      <tr>
+        <td><strong>conftest + fixture（1 文件）</strong></td>
+        <td><code>api-auto/conftest.py</code></td>
+        <td><strong>142 行 / 5 fixture</strong>：<code>env</code> (session) / <code>base_url</code> (session) / <code>logger</code> (session) / <code>api_client</code> (session) / <code>_session_token_cache</code> (session) + <code>auth_token</code> (function)</td>
+      </tr>
+      <tr>
+        <td><strong>common 工具（6 文件）</strong></td>
+        <td><code>api-auto/common/</code></td>
+        <td><code>base_api.py</code>（ApiClient 173 行：get/post/put/delete + set_token + _request 自动 ts/nonce + Authorization 注入）+ <code>assertion.py</code>（assert_business_code + JSON Schema）+ <code>logger.py</code>（控制台 + 文件）+ <code>data_loader.py</code>（<code>pytest_yaml_cases</code> helper，已迁出 conftest 避免 pluggy 陷阱）+ <code>allure_compat.py</code>（优雅降级 74 行）+ <code>__init__.py</code></td>
+      </tr>
+      <tr>
+        <td><strong>api 封装（3 文件 8 方法）</strong></td>
+        <td><code>api-auto/api/</code></td>
+        <td><code>login_api.py</code>（POST /login login_with_payload）+ <code>prod_api.py</code>（page_prod / prod_info / get_sku_list）+ <code>order_api.py</code>（confirm_order / submit_order）+ <code>__init__.py</code></td>
+      </tr>
+      <tr>
+        <td><strong>用例（3 文件 10 用例）</strong></td>
+        <td><code>api-auto/testcases/</code></td>
+        <td><code>test_login.py</code>（5 条参数化 / 58 行）+ <code>test_prod.py</code>（3 条 2 skip + 1 skipif / 63 行）+ <code>test_order.py</code>（2 条 skip 待回填 / 56 行）+ <code>__init__.py</code></td>
+      </tr>
+      <tr>
+        <td><strong>数据（1 文件）</strong></td>
+        <td><code>api-auto/data/</code></td>
+        <td><code>login_data.yaml</code>（42 行 5 条：登录成功 + 密码错 + 用户不存在 + 空用户名 + 空密码）</td>
+      </tr>
+      <tr>
+        <td><strong>reports（1 文件）</strong></td>
+        <td><code>api-auto/reports/</code></td>
+        <td><code>.gitkeep</code> 占位（allure 结果 + 日志目录）</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>关键数字</strong>：5 + 1 + 6 + 3 + 3 + 1 + 1 = <strong>20 文件手写</strong>；算上 <code>__init__.py</code> ×4 和 <code>.gitignore</code> = <strong>23 个落地文件</strong>（README/pytest.ini/env.example/run.sh 算入口 6）。本课用"23 文件"是泛指工程全貌。</p>
+
+  <h2 id="sec4">4. 核心概念 × 5（ApiClient 鉴权 / pluggy 陷阱 / fixture scope / allure 降级 / skip 兜底）</h2>
+
+  <h3>4.1 概念 1：ApiClient 自动鉴权 + ts/nonce 注入</h3>
+  <p><code>common/base_api.py:147-165</code> 提供 4 个便捷方法（<code>get</code> / <code>post</code> / <code>put</code> / <code>delete</code>），全部走 <code>_request()</code> 内部；<code>_request</code> 负责：</p>
+  <ul>
+    <li><strong>URL 拼接</strong>：<code>f"{self.base_url}/{path.lstrip('/')}"</code></li>
+    <li><strong>ts + nonce 自动注入 query</strong>（与 Postman prerequest 一致）</li>
+    <li><strong>Authorization 自动注入 header</strong>（<code>need_auth=True</code> 且 <code>self._token</code> 非空时）</li>
+    <li><strong>统一 [REQ] / [RESP] / [BIZ] 日志</strong></li>
+  </ul>
+  <p><strong>登录 + 加购的 sequence 流程</strong>：</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant U as 测试用例
+    participant C as ApiClient
+    participant S as mall4j 后端
+    U->>C: login(user, pwd)
+    C->>C: 自动注入 ts / nonce query
+    C->>S: POST /login + ts + nonce
+    S-->>C: {code:200, data:{accessToken:"xxx"}}
+    C->>C: set_token(token)
+    U->>C: add_cart(prodId)
+    C->>C: 自动注入 Authorization: Bearer xxx
+    C->>S: POST /p/shopCart + Authorization + ts + nonce
+    S-->>C: 200 OK
+    style C fill:#d4e6f1,stroke:#2874a6
+    style S fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>代码片段</strong>（<code>base_api.py</code> 摘）：</p>
+  <pre><code>def set_token(self, token: str) -> None:
+    """注入 Sa-Token；之后所有 need_auth=True 请求自动带 Authorization。"""
+    self._token = token
+
+def post(self, path: str, *, need_auth: bool = True, **kw) -&gt; requests.Response:
+    if "json" in kw and "json_body" not in kw:
+        kw["json_body"] = kw.pop("json")
+    return self._request("POST", path, need_auth=need_auth, **kw)</code></pre>
+  <div class="interview">
+    <div class="who">设计要点</div>
+    ApiClient 一个实例承载一个 session（连接复用）；<code>__init__</code> 不发任何请求；<strong>业务码 ≠ 200 仅打 warn 不抛错</strong>——让用例自己决定 assert 行为，保留负向场景自由度（密码错 / 用户不存在等）。
+  </div>
+
+  <h3>4.2 概念 2：yaml 数据驱动 + pluggy 陷阱</h3>
+  <p><strong>pluggy.PluginValidationError 陷阱</strong>：pytest 把 <code>conftest.py</code> 当成 plugin 入口；<strong>顶层</strong>的 <code>def pytest_yaml_cases(path, key)</code> 会被 pluggy 当成 hook 函数校验签名——若签名不像 hook 就抛 <code>PluginValidationError</code>。</p>
+  <p><strong>修法</strong>：helper 函数迁出 <code>conftest.py</code>，放进 <code>common/data_loader.py</code>，由测试文件 <code>from common.data_loader import pytest_yaml_cases</code> 显式导入。</p>
+  <pre><code># conftest.py 顶部注释（原文）
+# yaml 数据驱动 helper 已迁出至 common.data_loader，避免被 pytest 当成 plugin hook 注册
+
+# common/data_loader.py（按上下文推导）
+def pytest_yaml_cases(path: str, key: str):
+    """读 YAML 数据文件的 key 列表，用于 parametrize。"""
+    import yaml
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data[key]
+
+# testcases/test_login.py 用法
+@pytest.mark.parametrize("case", pytest_yaml_cases("data/login_data.yaml", "login_cases"))
+def test_login(self, case, api_client, logger):
+    payload = {"userName": case["userName"], "passWord": case["passWord"]}</code></pre>
+  <p><strong>反向教训</strong>：最初 helper 写在 conftest.py 顶层 → <code>pytest --collect-only</code> 抛 <code>PluginValidationError</code> → 5 条登录用例全部 collect 失败。迁到 <code>common/data_loader.py</code> 后 <code>collect-only</code> 立刻输出 <code>10 tests collected</code>。</p>
+
+  <h3>4.3 概念 3：fixture scope 设计（session 复用 + function 兜底）</h3>
+  <p>5 个 fixture 分两种 scope：</p>
+  <pre class="mermaid">
+graph TD
+    A["session scope<br/>整个测试会话复用一次"] --> B["api_client<br/>172 行 ApiClient 实例"]
+    A --> C["_session_token_cache<br/>dict 缓存 token"]
+    A --> D["env / base_url / logger<br/>环境与日志"]
+    E["function scope<br/>每条用例执行一次"] --> F["auth_token<br/>按需登录 + 写 cache"]
+    F --> C
+    style A fill:#d4e6f1,stroke:#2874a6
+    style E fill:#fef9e7,stroke:#888
+    style F fill:#fadbd8,stroke:#c0392b</pre>
+  <p><strong>为什么 auth_token 用 function scope？</strong></p>
+  <ul>
+    <li>session 级：所有用例共享同一个 token——登录一次，跑完 10 条用例；<strong>速度最优</strong>。</li>
+    <li>function 级：每条用例新登录——session 内缓存复用，避免每次都打 /login 接口；<strong>平衡</strong>速度 + 隔离。</li>
+    <li>本课用 <strong>function 触发 + session 缓存</strong> 混合：<code>auth_token</code> 是 function 级（保证每次都能取到最新），但内部读 <code>_session_token_cache</code>（避免重复登录）。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">scope 金句</div>
+    session 太宽（多用户 / 多 token 场景难处理），function 太窄（10 条用例 × 5 秒登录 = 50 秒浪费）；<strong>session 缓存 + function 触发</strong>是中间路径。
+  </div>
+
+  <h3>4.4 概念 4：allure 优雅降级（用户没装也能跑）</h3>
+  <p><code>common/allure_compat.py</code>（74 行）实现"<strong>装了 allure 用真 allure，没装 allure 用 identity / no-op</strong>"——核心代码：</p>
+  <pre><code>try:
+    import allure as _real_allure
+    _HAS_ALLURE = True
+except ImportError:
+    _HAS_ALLURE = False
+
+if _HAS_ALLURE:
+    attachment_type = _real_allure.attachment_type
+    _attachment = _real_allure.attach
+else:
+    attachment_type = _AttachmentType  # 占位类
+    def _identity_decorator(*_args, **_kw):
+        def _wrap(obj): return obj
+        return _wrap
+    def _noop_attach(*_args, **_kw): return None
+    _attachment = _noop_attach
+
+def feature(name: str):
+    if _HAS_ALLURE:
+        return _real_allure.feature(name)
+    return _identity_decorator(name)
+
+# 测试文件统一用法：from common import allure_compat as allure
+# @allure.feature("登录") → 真 allure 装饰 or identity 装饰</code></pre>
+  <p><strong>效果</strong>：</p>
+  <ul>
+    <li>用户装了 <code>allure-pytest</code>：<code>@allure.feature</code> 是真装饰器，<code>allure.attach</code> 真附件，<code>bash run.sh</code> 后 <code>allure serve reports</code> 能看完整报告。</li>
+    <li>用户没装：<code>@allure.feature</code> 是 identity 函数（直接返回被装饰对象），<code>allure.attach</code> 是 no-op，<code>pytest --collect-only</code> 照样输出 <code>10 tests collected</code>，<code>pytest -v</code> 照样跑 10 条。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">降级金句</div>
+    "<strong>框架不应该因为用户没装某个第三方包就跑不起来</strong>"——这是 api-auto 的设计底线：装 allure 出报告，不装 allure 也能跑测试，只丢报告装饰。
+  </div>
+
+  <h3>4.5 概念 5：skip 标记处理待环境用例</h3>
+  <p><code>test_prod.py</code> + <code>test_order.py</code> 共 5 条用例（3 prod + 2 order）需要 <code>PROD_ID</code> / <code>SKU_ID</code> / <code>SHOP_ID</code> / <code>ADDR_ID</code> 等真实 ID——用户启 8086 之前这些 ID 没回填。用 <code>pytest.mark.skip</code> + <code>skipif</code> 兜底：</p>
+  <pre><code># test_prod.py — 3 条商品用例
+@pytest.mark.skipif(
+    not os.getenv("PROD_ID") or os.getenv("PROD_ID") in ("", "1"),
+    reason="env.PROD_ID 未填或仍为占位 '1'，待用户回填真实 prodId 后解除 skip",
+)
+@pytest.mark.p1
+@allure.story("商品详情")
+def test_prod_info(self, api_client):
+    """GET /prod/prodInfo — 商品详情。"""
+    ...
+
+@pytest.mark.skip(reason="env 数据未回填，待用户启 8086 后从 tz_prod / tz_sku 查真实 ID 后解除 skip")
+@pytest.mark.p1
+def test_page_prod(self, api_client): ...
+
+@pytest.mark.skip(reason="env 数据未回填，待用户回填 PROD_ID / SKU_ID 后解除 skip")
+def test_get_sku_list(self, api_client): ...
+
+# test_order.py — 2 条订单用例（同款 skip 模式）
+@pytest.mark.skip(reason="env 数据未回填，待回填 PROD_ID/SKU_ID/SHOP_ID/ADDR_ID + token 后解除 skip")
+def test_confirm(self, api_client): ...
+
+@pytest.mark.skip(reason="env 数据未回填，待回填后解除 skip")
+def test_submit(self, api_client): ...</code></pre>
+  <p><strong>3 条 skip + 1 条 skipif 效果</strong>：</p>
+  <ul>
+    <li>默认状态（<code>.env</code> 不存在）：<code>PROD_ID</code> 空 → <code>test_prod_info</code> skipif 触发；其他 4 条硬 skip。5 条全 skip，<strong>collect 仍收集</strong> 10 条。</li>
+    <li>用户回填后：去掉 <code>skip</code> 标记 + 删 <code>skipif</code> 兜底，<code>pytest -v</code> 跑这 5 条。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">skip vs xfail</div>
+    <code>skip</code> = <strong>无条件不跑</strong>（环境没准备好）；<code>xfail</code> = <strong>期望失败</strong>（已知 bug 但暂不修）；<code>skipif</code> = <strong>条件不跑</strong>（动态检查）。本课 5 条用例是 skip，不是 xfail——它们不是"已知 bug"，而是"环境未就绪"。
+  </div>
+
+  <h2 id="sec5">5. 动手练：5 分钟装依赖 + collect-only 看 10 条用例</h2>
+  <p>学完概念后，5 分钟亲手跑一遍，<strong>这是 L10 的 win 产物</strong>——不需要后端启服务（10 条用例里 5 条登录可立刻跑，其他 5 条默认 skip）。</p>
+  <ol>
+    <li><strong>任务 A：装依赖</strong>——<code>cd test-cases/api-auto</code> → <code>pip install -r requirements.txt</code>（pytest 8.3 / requests 2.32 / allure-pytest 2.13 / pyyaml 等）。</li>
+    <li><strong>任务 B：copy env</strong>——<code>cp .env.example .env</code>（先不填，让 5 条商品 / 订单 skip）。</li>
+    <li><strong>任务 C：collect-only</strong>——<code>pytest --collect-only testcases/</code>，应看到 <strong>10 tests collected</strong>（5 login + 3 prod + 2 order）。</li>
+    <li><strong>任务 D：单独跑 login</strong>——<code>pytest -v testcases/test_login.py</code>，看 5 条登录参数化的展开（test_login[case0] ~ test_login[case4]）。如果后端没启，5 条会全部失败——<strong>没关系</strong>，看到 5 个测试 ID 已展开即可。</li>
+    <li><strong>任务 E：查看 allure 降级</strong>（可选）——故意 <code>pip uninstall allure-pytest</code>（或干脆不装），再跑 <code>pytest --collect-only</code>，依然 <strong>10 tests collected</strong>——这就是优雅降级。</li>
+  </ol>
+  <h3>5.1 验证标准</h3>
+  <ul>
+    <li>✅ <code>pytest --collect-only</code> 输出 <code>10 tests collected</code></li>
+    <li>✅ <code>pytest -v testcases/test_login.py</code> 看到 <code>test_login[case0]</code> ~ <code>test_login[case4]</code> 5 个 ID</li>
+    <li>✅ <code>test_prod.py</code> + <code>test_order.py</code> 5 条用例默认 skip（报 "SKIPPED"）</li>
+    <li>✅ 不装 allure-pytest 时 collect-only 仍然 10 条</li>
+  </ul>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（ApiClient 自动注入逻辑 / pluggy 陷阱的具体报错 / session vs function scope 取舍 / allure_compat 的 import 容错 / skip vs xfail 边界）抛给你的 AI 教师追问——单点困惑往往牵出整条"pytest 框架设计"的工程链，问得越具体，回答越能反哺 M2-D7（CI）/M2-D8（数据驱动扩展）的可扩展基座。
+  </div>
+
+  <h2 id="sec6">6. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>ApiClient 自动注入哪两个 query 参数到所有请求？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) <code>token</code> 与 <code>userId</code></label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) <code>ts</code> 与 <code>nonce</code></label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) <code>page</code> 与 <code>size</code></label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) <code>categoryId</code> 与 <code>shopId</code></label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>为什么 yaml helper 函数必须迁出 <code>conftest.py</code> 顶层？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) conftest.py 不允许 import yaml</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) pytest 会把 conftest.py 当成 plugin，顶层函数被 pluggy 当成 hook 校验签名，签名不像 hook 就抛 <code>PluginValidationError</code></label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) yaml 文件必须放在 data/ 目录</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) conftest.py 不能写 def 关键字</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>本课 5 条商品 / 订单用例为何用 <code>@pytest.mark.skip</code> 而非 <code>@pytest.mark.xfail</code>？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 因为 skip 比 xfail 跑得更快</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 因为这些用例是"环境未就绪"（PROD_ID 等未回填），不是"已知 bug 暂不修"</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 因为 xfail 会让 CI 报告报错</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 因为 pytest 不支持 xfail</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0009-postman-api-testing.html">第 9 课 Postman 接口调试</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0001-mall4j-business-overview.html">第 1 课 mall4j 业务概览（回到业务原点）</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../test-cases/api-auto/README.md">api-auto 框架说明（test-cases/api-auto/README.md）</a></li>
+      <li><a href="../test-cases/api-auto/conftest.py">conftest.py fixture 定义（test-cases/api-auto/conftest.py）</a></li>
+      <li><a href="../test-cases/api-auto/common/base_api.py">ApiClient 实现（test-cases/api-auto/common/base_api.py）</a></li>
+      <li><a href="../test-cases/api-auto/common/allure_compat.py">allure 优雅降级（test-cases/api-auto/common/allure_compat.py）</a></li>
+      <li><a href="../test-cases/api-auto/data/login_data.yaml">登录参数化数据（test-cases/api-auto/data/login_data.yaml）</a></li>
+      <li><a href="../test-cases/postman/mall4j-api-collection.json">Postman Collection v2.1（M1-D4-001 对照）</a></li>
+      <li><a href="../CONTEXT.md">领域语言速查（CONTEXT.md §3 可测点速查）</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M2-D6-001 行）</a></li>
+    </ul>
+    <div>第 10 课到这里就完成了——L09（Postman 资产化）+ L10（pytest 代码化）= mall4j 接口测试工程闭环。回到第 1 课再走一遍业务原点，做完整轮复盘。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=B(1), Q3=B(1) ===
+  var correctMap = { q1: '1', q2: '1', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec4', text: '回到第 4 节：再读"ApiClient 自动鉴权 + ts/nonce 注入"' },
+    q2: { href: '#sec4', text: '回到第 4 节：再读"yaml 数据驱动 + pluggy 陷阱"' },
+    q3: { href: '#sec4', text: '回到第 4 节：再读"skip 标记处理待环境用例"' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

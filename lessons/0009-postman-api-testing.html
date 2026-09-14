@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 9 课 Postman 接口调试——Runner 顺序与鉴权边界</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+    /* mermaid 容器宽度（与正文一致） */
+    pre.mermaid { background: #fafafa; padding: 0.6em; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 9 课：Postman 接口调试——Runner 顺序与鉴权边界</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 9 课</span>
+    <span class="tag">难度 ★★★☆☆</span>
+    <span class="tag">时长 30 分钟</span>
+    <span class="tag">实战对象 M1-D4-001 Postman Collection v2.1</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L06/L07/L08 设计 + 缺陷 + 报告）</a></li>
+      <li><a href="#sec2">为什么测试工程师必须懂 Postman Collection（资产化 / Runner / onboarding）</a></li>
+      <li><a href="#sec3">5 件产物速览：Collection + Env + 2 JS + 20 用例文档</a></li>
+      <li><a href="#sec4">核心概念 × 4（schema / env vs collectionVariables / AuthFilter / Runner 顺序）</a></li>
+      <li><a href="#sec5">动手练：5 分钟把 8 条公开接口用例在 Runner 里跑过</a></li>
+      <li><a href="#sec6">课堂小测 + 收官提示</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L06/L07/L08 设计 + 缺陷 + 报告）</h2>
+  <p>前 3 课把"测什么、为什么测、写成什么样"讲清楚了，本课换一条腿——<strong>怎么用工具把这 150 条用例落到 20 条接口上</strong>。</p>
+  <ul>
+    <li><strong>第 6 课（150 条用例库）</strong>：登录 40 / 商品 30 / 购物车 20 / 订单 25 / 会员 15 / 兼容性 20——6 模块 11 子模块按方法 + 优先级拆。</li>
+    <li><strong>第 7 课（18 缺陷库）</strong>：Critical 3 / Major 6 / Minor 6 / Trivial 3，按 Controller 静态分析锁定；落地在 <code>bug-list.md</code>。</li>
+    <li><strong>第 8 课（9 章报告骨架）</strong>：把 150 用例 + 18 缺陷 + 三流合一视角串成 17 KB 报告。</li>
+    <li><strong>本课的承诺</strong>：用 Postman Collection v2.1 + Environment + Pre-request + Tests 4 件套把 150 条里的 <strong>20 条接口用例资产化</strong>——落到 <code>test-cases/postman/</code> 5 个文件（55 KB Collection + 1.8 KB Env + 974 B pre-request + 841 B tests + 13 KB 文档）。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    L06~L08 是"<strong>设计 + 判断</strong>"，L09~L10 是"<strong>工具 + 自动化</strong>"。前者决定报告里写什么数字，后者决定这些数字能不能在 CI 里 5 分钟重跑一次。
+  </div>
+
+  <h2 id="sec2">2. 为什么测试工程师必须懂 Postman Collection</h2>
+  <p>Postman 看似只是"点一点发请求"，但<strong>Collection v2.1 schema 把"接口用例资产化"</strong>了——这才是测试岗简历上"独立设计接口测试方案"那条的硬通货。三个理由：</p>
+  <table>
+    <thead><tr><th>#</th><th>理由</th><th>对应简历/工作场景</th><th>本课落地</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>接口用例资产化</strong></td>
+        <td>"独立设计 20 条接口用例，输出 Postman Collection 交付"——这是面试官<strong>必看</strong>的物证</td>
+        <td><code>mall4j-api-collection.json</code> 55 KB / 1477 行 v2.1 schema</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>Runner 批量 + Newman CLI</strong></td>
+        <td>"用 Newman CLI 把 20 条用例接入 CI"——M2-D7 GitHub Actions 落点</td>
+        <td>5 个 folder × Runner 顺序：公开 8 → 登录 3 → 购物车 3 → 订单 4 → 异常 2</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>新人 onboarding</strong></td>
+        <td>"新同事 1 小时接手接口测试"——onboarding 成本决定团队产出比</td>
+        <td>Environment 17 个变量名 + Pre-request + Tests 双 snippet，0 学习曲线</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>MISSION.md 主线</strong>（第 6 段"用户目标"）：用户在秋招 2026-09~11 投递<strong>测试岗</strong>时，"接口测试"是必填项——不是会用 Postman 点按钮，而是<strong>能把 20 条用例变成 1 个 JSON 文件 + 1 份 Markdown 说明 + 1 条 Runner 命令</strong>。M1-D4-001 就是这条主线的<strong>产物</strong>。</p>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "基于 Postman Collection v2.1 schema 独立设计 20 条 mall4j 用户端接口用例（含 8 条公开 + 12 条认证 / 购物车 / 订单 / 异常），用 Pre-request + Tests 双 snippet 实现 ts/nonce 注入 + token 提取自动化，支持 Newman CLI 一键 Runner"——这句直接写进 M1 项目经验。
+  </div>
+
+  <h2 id="sec3">3. 5 件产物速览：Collection + Env + 2 JS + 20 用例文档</h2>
+  <p>来源：<code>test-cases/postman/</code> 4 文件 + <code>test-cases/api-20-cases.md</code> 1 文件。本课的 5 件产物全部是<strong>纯文本</strong>，无二进制：</p>
+  <table>
+    <thead><tr><th>产物</th><th>路径</th><th>行数</th><th>字节</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Collection JSON</strong></td>
+        <td><code>test-cases/postman/mall4j-api-collection.json</code></td>
+        <td>1477</td>
+        <td>55 KB</td>
+        <td>v2.1 schema；5 个 folder × 20 条用例；Pre-request + Tests 内联到每 item.exec</td>
+      </tr>
+      <tr>
+        <td><strong>Environment JSON</strong></td>
+        <td><code>test-cases/postman/mall4j-api-environment.json</code></td>
+        <td>94</td>
+        <td>1.8 KB</td>
+        <td>17 个变量：base_url / token / prodId / addrId / ts / nonce 等</td>
+      </tr>
+      <tr>
+        <td><strong>pre-request.js</strong></td>
+        <td><code>test-cases/postman/pre-request.js</code></td>
+        <td>22</td>
+        <td>974 B</td>
+        <td>通用 ts / nonce 注入（每请求前自动跑）</td>
+      </tr>
+      <tr>
+        <td><strong>tests-snippet.js</strong></td>
+        <td><code>test-cases/postman/tests-snippet.js</code></td>
+        <td>22</td>
+        <td>841 B</td>
+        <td>通用断言 HTTP 200 + 业务码 200（每响应后自动跑）</td>
+      </tr>
+      <tr>
+        <td><strong>20 用例文档</strong></td>
+        <td><code>test-cases/api-20-cases.md</code></td>
+        <td>323</td>
+        <td>13 KB</td>
+        <td>每条用例的 ID / 路径 / method / 参数 / 期望 / 前置 / 步骤</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>关键设计</strong>：</p>
+  <ul>
+    <li><strong>snippet 内联到每个 item.exec</strong>（不是外链 <code>--test-script</code>）——Postman v2.1 schema<strong>不支持外链 JS 引用</strong>，每个 item 必须把 snippet 完整贴进 <code>event.script.exec</code> 数组。Newman CLI 才支持 <code>--test-script</code> 外链；UI 模式必须内联。</li>
+    <li><strong>exclude PayNoticeController</strong>（<code>@Hidden</code> 注解）——<code>PayNoticeController</code> 在 Controller 上加了 <code>@Hidden</code>（Swagger 隐藏 + 对外不暴露），从 20 条用例里剔除，避免用例跑到 404 / 405。</li>
+    <li><strong>Runner 顺序固定</strong>——5 个 folder 按"公开 → 认证 → 购物车 → 订单 → 异常"排列，Runner 按 folder 顺序执行，依赖关系天然成立（购物车依赖 token、订单依赖购物车）。</li>
+  </ul>
+
+  <h2 id="sec4">4. 核心概念 × 4（schema / env vs collectionVariables / AuthFilter / Runner 顺序）</h2>
+
+  <h3>4.1 概念 1：Postman v2.1 schema 结构</h3>
+  <p>v2.1 schema 是 Postman 5 年稳定的 JSON 契约。顶层字段 = <code>info</code> + <code>item</code>（数组）+ 可选 <code>event</code>（Collection 级脚本）。每个 <code>item</code> = folder 或 request；递归结构：</p>
+  <pre class="mermaid">
+graph TD
+    A["info<br/>_postman_id / name / schema"] --> B["item 数组<br/>5 folder × 20 request"]
+    B --> C["request<br/>method / url / header / body"]
+    B --> D["event[0]<br/>listen=prerequest"]
+    B --> E["event[1]<br/>listen=test"]
+    D --> F["script.exec[]<br/>内联 JS 字符串"]
+    E --> G["script.exec[]<br/>内联 JS 字符串"]
+    C --> H["url<br/>raw / host / path / query"]
+    style A fill:#eafaf1,stroke:#888
+    style B fill:#d4e6f1,stroke:#2874a6
+    style C fill:#fef9e7,stroke:#888
+    style F fill:#fdebd0,stroke:#888
+    style G fill:#fdebd0,stroke:#888</pre>
+  <p>关键观察：</p>
+  <ul>
+    <li><strong><code>event[].script.exec</code> 是字符串数组</strong>（不是单字符串）——每行一句，独立调试；这是 v2.1 schema 的设计取舍。</li>
+    <li><strong><code>url</code> 拆 raw / host / path / query 四块</strong>——<code>{{base_url}}</code> 模板写在 <code>host</code> 里；query 单独数组支持 key / value / disabled 三态。</li>
+    <li><strong><code>item</code> 可嵌套</strong>（folder 内嵌 folder）——本课用 1 层 folder，按业务模块切分。</li>
+  </ul>
+
+  <h3>4.2 概念 2：环境变量 vs 集合变量（collectionVariables）</h3>
+  <p>Postman 变量作用域有 4 层：<strong>Global &gt; Collection &gt; Environment &gt; Local</strong>。本课 5 件产物里只用到 Environment 和 Collection 两层：</p>
+  <table>
+    <thead><tr><th>变量</th><th>作用域</th><th>典型值</th><th>谁设置</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>base_url</code></td>
+        <td>Environment</td>
+        <td><code>http://localhost:8086</code></td>
+        <td>人（启动前改一次）</td>
+      </tr>
+      <tr>
+        <td><code>username</code> / <code>password</code></td>
+        <td>Environment</td>
+        <td><code>testuser</code> / <code>test123456</code></td>
+        <td>人（凭据）</td>
+      </tr>
+      <tr>
+        <td><code>token</code></td>
+        <td>Environment（运行时）</td>
+        <td>登录后写入</td>
+        <td>Tests snippet：<code>pm.collectionVariables.set</code></td>
+      </tr>
+      <tr>
+        <td><code>ts</code> / <code>nonce</code> / <code>ts_short</code></td>
+        <td>Collection（pm.collectionVariables）</td>
+        <td><code>Date.now()</code> / <code>crypto.randomUUID()</code></td>
+        <td>Pre-request snippet 自动注入</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>分工</strong>：人设的进 Environment（<code>base_url</code>、凭据）；机器跑的进 Collection Variables（<code>ts</code>、<code>nonce</code>、<code>token</code>）——<strong>人/机边界</strong>清晰。</p>
+  <pre><code>// pre-request.js (22 行)
+if (typeof pm !== 'undefined' &amp;&amp; pm.collectionVariables) {
+    pm.collectionVariables.set('ts', Date.now());
+    pm.collectionVariables.set(
+        'nonce',
+        (typeof crypto !== 'undefined' &amp;&amp; crypto.randomUUID)
+            ? crypto.randomUUID()
+            : String(Math.random()).slice(2)
+    );
+    var tsStr = String(Date.now());
+    pm.collectionVariables.set('ts_short', tsStr.slice(-4));
+}</code></pre>
+  <div class="interview">
+    <div class="who">作用域金句</div>
+    <code>base_url</code> 用 Environment 是因为"开发 / 测试 / 生产"3 套 env 切换；<code>ts</code> 用 Collection 是因为它<strong>每请求都变</strong>，放 Environment 等于污染人设值。"人设的进 env，机器设的进 collection"——这条规则 5 件产物全遵守。
+  </div>
+
+  <h3>4.3 概念 3：AuthFilter 拦截范围决定 header 注入</h3>
+  <p><code>yami-shop-security/yami-shop-security-api</code> 的 <code>ResourceServerAdapter.java:17-19</code> 决定哪些路径需要鉴权 header：</p>
+  <pre class="mermaid">
+graph LR
+    A["请求路径<br/>Path"] --> B{"以 /p/ 开头?"}
+    B -- yes --> C["需 Authorization: Bearer token<br/>header 注入"]
+    B -- no --> D["公开<br/>无 header"]
+    C --> E["pm.collectionVariables.get('token')"]
+    D --> F["直接发请求"]
+    style A fill:#eafaf1,stroke:#888
+    style C fill:#fadbd8,stroke:#c0392b
+    style D fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>代码证据</strong>（<code>ResourceServerAdapter.java:17-19</code>）：</p>
+  <pre><code>// 简化示意（实际从源码读出）
+public final Predicate&lt;ServerHttpRequest&gt; AUTH_PREDICATE = request -&gt;
+    request.getURI().getPath().startsWith("/p/");</code></pre>
+  <p><strong>本课落地的 5 folder 对应关系</strong>：</p>
+  <table>
+    <thead><tr><th>folder</th><th>路径前缀</th><th>需 Authorization</th><th>用例数</th></tr></thead>
+    <tbody>
+      <tr><td>1.公开接口</td><td><code>/prod/*</code> <code>/category/*</code> <code>/sku/*</code> <code>/indexImgs/*</code> <code>/search/*</code></td><td>否</td><td>8</td></tr>
+      <tr><td>2.登录/认证</td><td><code>/login</code> <code>/login/sms</code> <code>/p/user/info</code></td><td>登录无；info 需</td><td>3</td></tr>
+      <tr><td>3.购物车</td><td><code>/p/shopCart/*</code></td><td>是</td><td>3</td></tr>
+      <tr><td>4.订单/支付</td><td><code>/p/order/*</code> <code>/p/pay/*</code></td><td>是</td><td>4</td></tr>
+      <tr><td>5.异常/边界</td><td>混合</td><td>按需</td><td>2</td></tr>
+    </tbody>
+  </table>
+  <p><strong>关键洞察</strong>：<code>/p/</code> 前缀是 mall4j 的"<strong>需要登录</strong>"信号；不带 <code>/p/</code> 是公开 API。读源码 17-19 行比读文档更可靠——文档可能漏写这条规则。</p>
+
+  <h3>4.4 概念 4：Runner 顺序与数据依赖</h3>
+  <p>Collection 的 5 个 folder 在 Runner 里<strong>按 JSON 数组顺序执行</strong>（Postman Runner 的默认行为）。这个顺序不是任意的——它必须满足"token 提取 → token 复用"的依赖链：</p>
+  <pre><code>// 2.登录/认证 folder 里的"登录获取token"用例，Tests snippet 里加 1 行：
+if (typeof pm !== 'undefined' &amp;&amp; pm.collectionVariables) {
+    var body = pm.response.json();
+    pm.collectionVariables.set('token', body.data.accessToken);
+}
+
+// 之后 3.购物车 / 4.订单 全部用例通过 {{token}} 模板取到 Bearer 注入</code></pre>
+  <p><strong>依赖图</strong>：</p>
+  <pre class="mermaid">
+graph TD
+    A["1.公开接口<br/>无需 token"] --> B["2.登录/认证<br/>登录写入 token"]
+    B --> C["3.购物车<br/>读 token 注入 header"]
+    B --> D["4.订单/支付<br/>读 token 注入 header"]
+    A --> E["5.异常/边界<br/>混合"]
+    C --> E
+    D --> E
+    style B fill:#fadbd8,stroke:#c0392b
+    style C fill:#d4e6f1,stroke:#2874a6
+    style D fill:#d4e6f1,stroke:#2874a6</pre>
+  <p><strong>反例</strong>：把"登录获取 token"放 folder 5，folder 3 / 4 会因为 token 为空跑出 401，20 条用例全红——这就是 Runner 顺序的工程价值。<strong>先无依赖、再有依赖</strong>是数据依赖型 Collection 的黄金法则。</p>
+  <div class="interview">
+    <div class="who">面试金句</div>
+    "Postman Collection Runner 默认按 item 数组顺序执行；依赖型用例（如登录 → 加购）必须按顺序排放，否则 token 取不到，后续用例全 401。数据依赖型 Collection 的黄金法则是'<strong>先无依赖、再有依赖</strong>'"——这句直接进 M1 项目经验。
+  </div>
+
+  <h2 id="sec5">5. 动手练：5 分钟把 8 条公开接口用例在 Runner 里跑过</h2>
+  <p>学完概念后，5 分钟亲手跑一遍，<strong>这是 L09 的 win 产物</strong>——不需要后端启服务（公开 8 条不需要 token，Postman 点 Send 就能看到响应）。</p>
+  <ol>
+    <li><strong>任务 A：打开 Collection</strong>——把 <code>test-cases/postman/mall4j-api-collection.json</code> 拖进 Postman，左侧 Collections 面板应看到 5 个 folder：1.公开接口 / 2.登录/认证 / 3.购物车 / 4.订单/支付 / 5.异常/边界。<strong>截图 5 个 folder 列表</strong>存到 <code>learning-records/0009-postman-folders.png</code>。</li>
+    <li><strong>任务 B：导入 Environment</strong>——把 <code>mall4j-api-environment.json</code> 导入 Postman → Environments → 选 <code>mall4j-api-local</code>；右上角环境切换器确认是绿色 active。把 <code>base_url</code> 改成本地 <code>http://localhost:8086</code>（或你启的后端端口）。</li>
+    <li><strong>任务 C：跑 8 条公开接口</strong>——点 "1.公开接口" folder → Run → 选 folder → Run。Runner 报告应显示 8/8 passed（业务码 200）或 8/8 failed（如果后端没启）。<strong>无后端也至少能看见 Runner 报告结构</strong>（这就是资产化的意义）。</li>
+    <li><strong>任务 D：改 Tests snippet</strong>——随便挑 1 条公开接口（如商品列表-分页查询）→ 点 Tests tab → 在 snippet 后加一行 <code>pm.test('msg=SUCCESS', () =&gt; pm.expect(json.msg).to.eql('SUCCESS'));</code> → Send → 看 Tests tab 第 3 条断言结果。</li>
+    <li><strong>任务 E：导出 → Newman CLI</strong>（进阶）——把 Collection + Environment 导出回原目录；终端跑 <code>newman run mall4j-api-collection.json -e mall4j-api-environment.json</code>，看 20 条用例的报告（含 snipped 内联脚本）。</li>
+  </ol>
+  <h3>5.1 验证标准</h3>
+  <ul>
+    <li>✅ 5 个 folder 列表截图清晰（folder 名称可见）</li>
+    <li>✅ Runner 报告 8/8 通过（后端启）<strong>或</strong> 8/8 failed 但请求结构可见（后端未启）</li>
+    <li>✅ 自己加的 <code>msg=SUCCESS</code> 断言在 Runner 报告可见</li>
+    <li>✅ Newman CLI 跑出 20 条用例的报告（哪怕全红也行）</li>
+  </ul>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（v2.1 schema 字段含义 / env vs collectionVariables 边界 / AuthFilter 路径前缀来源 / Runner 顺序依赖 / snippet 为何必须内联 / Newman CLI 与 Postman UI 的差异）抛给你的 AI 教师追问——单点困惑往往牵出整条"接口用例资产化"的工程链，问得越具体，回答越能反哺 M2-D6-001 的 pytest 骨架。
+  </div>
+
+  <h2 id="sec6">6. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>Postman Collection v2.1 schema 的顶层字段，下列哪一项不在其中？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) info（_postman_id / name / schema）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) item（folder / request 数组）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) event（listen=prerequest/test）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) header（请求头全局默认值）</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>登录用例提取 token 后，下游用例如何取到？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 通过 <code>pm.environment.get('token')</code>（写入 Environment）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 通过 <code>pm.collectionVariables.get('token')</code>（写入 Collection Variables）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 通过 <code>pm.variables.get('token')</code>（全局变量）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 通过 <code>pm.globals.get('token')</code>（Globals 变量）</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>mall4j 后端哪些路径前缀会触发 AuthFilter（需要 Authorization header）？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 所有 <code>/prod/*</code> 路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 所有 <code>/login</code> 路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 所有以 <code>/p/</code> 开头的路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 所有以 <code>/api/</code> 开头的路径</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0008-report-skeleton-9-sections.html">第 8 课 9 章功能测试报告骨架</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0010-pytest-requests-testing.html">第 10 课 pytest + requests 自动化</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../test-cases/postman/mall4j-api-collection.json">Postman Collection v2.1（test-cases/postman/mall4j-api-collection.json）</a></li>
+      <li><a href="../test-cases/postman/mall4j-api-environment.json">Environment 配置（test-cases/postman/mall4j-api-environment.json）</a></li>
+      <li><a href="../test-cases/postman/pre-request.js">Pre-request 通用脚本（test-cases/postman/pre-request.js）</a></li>
+      <li><a href="../test-cases/postman/tests-snippet.js">Tests 通用断言（test-cases/postman/tests-snippet.js）</a></li>
+      <li><a href="../test-cases/api-20-cases.md">20 条接口用例文档（test-cases/api-20-cases.md）</a></li>
+      <li><a href="../CONTEXT.md">领域语言速查（CONTEXT.md §3 可测点速查）</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M1-D4-001 行）</a></li>
+    </ul>
+    <div>第 9 课到这里就完成了，去第 10 课把 20 条接口用例搬到 pytest + requests 自动化框架里。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=D(3), Q2=B(1), Q3=C(2) ===
+  var correctMap = { q1: '3', q2: '1', q3: '2' };
+
+  var chapterHint = {
+    q1: { href: '#sec4', text: '回到第 4 节：再读"Postman v2.1 schema 结构" mermaid 图' },
+    q2: { href: '#sec4', text: '回到第 4 节：再读"环境变量 vs 集合变量"' },
+    q3: { href: '#sec4', text: '回到第 4 节：再读"AuthFilter 拦截范围决定 header 注入"' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

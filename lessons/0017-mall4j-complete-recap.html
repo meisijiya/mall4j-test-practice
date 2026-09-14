@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>第 17 课 mall4j 完整收尾 + 简历包 — 双非大四测开岗求职冲刺</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="container">
+<header>
+<h1>第 17 课 mall4j 完整收尾 + 简历包</h1>
+<p class="subtitle">13/13 features done · 教学库存 17 课 + 15 cheatsheet + 17 learning-records · M5-D14-001 简历 v3 落地</p>
+<div class="badge-row">
+<span class="badge">13/13 收官</span>
+<span class="badge">M5 简历阶段</span>
+<span class="badge">3 GitHub 仓库就绪</span>
+<span class="badge">数字 ×2 原则 100% 守</span>
+</div>
+</header>
+
+<nav class="toc">
+<h2>目录</h2>
+<ol>
+<li><a href="#sec-overview">本课总览：13/13 收官 + 简历包</a></li>
+<li><a href="#sec-5stage">mall4j 5 阶段汇总表</a></li>
+<li><a href="#sec-resume">简历 v3 包装规则（PROJECT_TARGET_BOOK §5 落地）</a></li>
+<li><a href="#sec-3repos">3 个 GitHub 仓库 README 设计</a></li>
+<li><a href="#sec-flow">投递闭环流程图</a></li>
+<li><a href="#sec-interview">5 类高频追问 + 答案框架</a></li>
+<li><a href="#sec-quiz">3 题 quiz 自检</a></li>
+<li><a href="#sec-next">下一步：M4 mall-ai 独立 harness</a></li>
+</ol>
+</nav>
+
+<section id="sec-overview">
+<h2>1. 本课总览：13/13 收官 + 简历包</h2>
+<p>本课是 mall4j 主练手载体（M0-M5 共 6 阶段 13 features）的<strong>完整收官课</strong>。前面 16 课覆盖业务理解 → 测试设计 → 接口/UI 自动化 → CI → 性能调优的全栈技能点；本课重点在于把 13 个 features 的产出<strong>打包成可投递的简历 + 3 个 GitHub 仓库</strong>。</p>
+
+<h3>1.1 关键里程碑</h3>
+<ul>
+<li><strong>2026-09-14</strong>：mall4j 主练手载体收官（13/13 features done）</li>
+<li><strong>2026-09-14</strong>：resume.md v3 + 3 个 GitHub 仓库 README + init-repo.sh 落地</li>
+<li><strong>2026-09-14</strong>：教学库存扩展至 17 课 + 15 cheatsheet + 17 learning-records</li>
+<li><strong>下一步</strong>：用户本地 GitHub 建仓 → init-repo.sh 三模式填充 → push → 投递</li>
+</ul>
+
+<h3>1.2 13/13 features 完成清单</h3>
+<table>
+<thead><tr><th>阶段</th><th>Feature ID</th><th>标题</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td>M0</td><td>HARNESS-001</td><td>AGENTS.md 路由化 + 5 个子系统骨架</td><td>✅ done</td></tr>
+<tr><td rowspan="5">M1 功能+接口</td><td>M1-D1-001</td><td>环境上线（8086 + 8085）</td><td>✅ done</td></tr>
+<tr><td>M1-D2-001</td><td>功能用例 90 条（登录/注册/商品/购物车）</td><td>✅ done</td></tr>
+<tr><td>M1-D3-001</td><td>60 条用例 + 18 缺陷 + 9 章报告</td><td>✅ done</td></tr>
+<tr><td>M1-D4-001</td><td>Postman v2.1 collection 20 用例</td><td>✅ done</td></tr>
+<tr><td>M1-D5-001</td><td>Postman v3.0 完整链路 40 用例</td><td>✅ done</td></tr>
+<tr><td rowspan="4">M2 双自动化+CI</td><td>M2-D6-001</td><td>pytest + requests 起步 23 文件</td><td>✅ done</td></tr>
+<tr><td>M2-D7-001</td><td>接口框架 + YAML + UI 起步</td><td>✅ done</td></tr>
+<tr><td>M2-D8-001</td><td>UI POM 7 类 + UI 路径 2 captcha mock</td><td>✅ done</td></tr>
+<tr><td>M2-D9-001</td><td>CI 接入 + 仓库就绪</td><td>✅ done</td></tr>
+<tr><td rowspan="2">M3 性能+调优</td><td>M3-D10-001</td><td>Locust 登录压测 100u/60s</td><td>✅ done</td></tr>
+<tr><td>M3-D11-001</td><td>3 场景阶梯 50/100/200/500 + 调优复测</td><td>✅ done</td></tr>
+<tr><td>M5 简历</td><td>M5-D14-001</td><td>简历 v3 + 3 GitHub 仓库 README + init-repo.sh</td><td>✅ done</td></tr>
+</tbody>
+</table>
+
+<p class="highlight">⚠️ 注：M4 mall-ai 本地跑通实测（PROJECT_TARGET_BOOK §4 D12-D13）是<strong>独立项目独立 harness</strong>，由 <code>mall-ai-after-sales-platform</code> 仓库承接，<strong>不在 mall4j feature_list 登记</strong>（详见 PROJECT_TARGET_BOOK §2.2 + AGENTS.md §不变量 1 AGPLv3 边界）。</p>
+</section>
+
+<section id="sec-5stage">
+<h2>2. mall4j 5 阶段汇总表</h2>
+
+<h3>2.1 M0-HARNESS 阶段</h3>
+<table>
+<thead><tr><th>产物</th><th>路径</th><th>字节</th></tr></thead>
+<tbody>
+<tr><td>AGENTS.md 路由</td><td><code>AGENTS.md</code></td><td>~2 KB</td></tr>
+<tr><td>CONTEXT.md 领域语言</td><td><code>CONTEXT.md</code></td><td>~6 KB</td></tr>
+<tr><td>feature_list.json 13 features</td><td><code>feature_list.json</code></td><td>14.4 KB</td></tr>
+<tr><td>init.sh 门禁</td><td><code>init.sh</code></td><td>2.5 KB</td></tr>
+<tr><td>progress.md 证据链</td><td><code>progress.md</code></td><td>50 行</td></tr>
+<tr><td>.scratch/handoff.md 交接</td><td><code>.scratch/handoff.md</code></td><td>329 行</td></tr>
+</tbody>
+</table>
+
+<h3>2.2 M1 功能+接口 阶段</h3>
+<table>
+<thead><tr><th>Feature</th><th>产物</th><th>简历数字</th></tr></thead>
+<tbody>
+<tr><td>M1-D2-001</td><td>testcases/M1-D2-001/ (csv + md + generator)</td><td>90 条用例</td></tr>
+<tr><td>M1-D3-001</td><td>testcases/M1-D3-001/ (csv + md + bugs + report)</td><td>60 用例 + 18 缺陷 + 9 章报告</td></tr>
+<tr><td>M1-D4-001</td><td>test-cases/postman/ (v2.1 + env + JS)</td><td>20 Postman 用例</td></tr>
+<tr><td>M1-D5-001</td><td>test-cases/postman/ (v3.0 完整链路)</td><td>40 用例 / 65 PASS</td></tr>
+</tbody>
+</table>
+
+<h3>2.3 M2 双自动化+CI 阶段</h3>
+<table>
+<thead><tr><th>Feature</th><th>产物</th><th>简历数字</th></tr></thead>
+<tbody>
+<tr><td>M2-D6-001</td><td>test-cases/api-auto/ 23 文件</td><td>pytest 起步 / 6 PASS</td></tr>
+<tr><td>M2-D7-001</td><td>test-cases/api-auto/ 28 文件 / +57KB</td><td>47 yaml 用例 + UI 起步</td></tr>
+<tr><td>M2-D8-001</td><td>test-cases/api-auto/ 38+ 文件 / +110KB</td><td>75 yaml + 7 Page + 12 UI 场景</td></tr>
+<tr><td>M2-D9-001</td><td>.github/workflows/api-test.yml + allure-report.yml</td><td>CI 绿勾</td></tr>
+</tbody>
+</table>
+
+<h3>2.4 M3 性能+调优 阶段</h3>
+<table>
+<thead><tr><th>Feature</th><th>产物</th><th>简历数字</th></tr></thead>
+<tbody>
+<tr><td>M3-D10-001</td><td>test-cases/perf/ 9 文件</td><td>Locust 100u/60s 登录压测</td></tr>
+<tr><td>M3-D11-001</td><td>test-cases/perf/stepped/ 9 文件</td><td>3 场景 × 4 阶梯 × 2 轮 = 24 跑次</td></tr>
+<tr><td>调优产出</td><td>tuning-config.properties + tuning-jvm.sh</td><td>Tomcat/HikariCP/Lettuce 调优</td></tr>
+</tbody>
+</table>
+
+<h3>2.5 M5 简历 阶段（本课重点）</h3>
+<table>
+<thead><tr><th>产物</th><th>路径</th><th>字节</th></tr></thead>
+<tbody>
+<tr><td>resume.md v3</td><td><code>resume.md</code></td><td>6.2 KB</td></tr>
+<tr><td>mall4j-test-practice README</td><td><code>docs/3-github-repos/mall4j-test-practice/README.md</code></td><td>4.5 KB / 170 行</td></tr>
+<tr><td>mall4j-auto-test README</td><td><code>docs/3-github-repos/mall4j-auto-test/README.md</code></td><td>7.8 KB / 222 行</td></tr>
+<tr><td>agent-eval-practice README</td><td><code>docs/3-github-repos/agent-eval-practice/README.md</code></td><td>8.5 KB / 197 行</td></tr>
+<tr><td>init-repo.sh 三模式</td><td><code>docs/3-github-repos/init-repo.sh</code></td><td>5.5 KB / 254 行</td></tr>
+</tbody>
+</table>
+
+<h3>2.6 教学库存（本课收尾后）</h3>
+<table>
+<thead><tr><th>类型</th><th>本课前</th><th>本课后</th><th>增量</th></tr></thead>
+<tbody>
+<tr><td>lessons/</td><td>16 课</td><td><strong>17 课</strong></td><td>+1（本课）</td></tr>
+<tr><td>reference/</td><td>14 cheatsheet</td><td><strong>15 cheatsheet</strong></td><td>+1（0017）</td></tr>
+<tr><td>learning-records/</td><td>16 篇</td><td><strong>17 篇</strong></td><td>+1（0017）</td></tr>
+</tbody>
+</table>
+</section>
+
+<section id="sec-resume">
+<h2>3. 简历 v3 包装规则（PROJECT_TARGET_BOOK §5 落地）</h2>
+
+<h3>3.1 数字 ×2 原则校验表</h3>
+<p><strong>核心守则</strong>：简历可写数字 = 实际产出 ×2 不超。避免面试深问露馅。</p>
+<table>
+<thead><tr><th>数字项</th><th>实际产出</th><th>简历写法</th><th>×2 校验</th></tr></thead>
+<tbody>
+<tr><td>功能测试用例</td><td>150 条（D2 90 + D3 60）</td><td>编写测试用例 150 条</td><td>✅ 不超</td></tr>
+<tr><td>有效缺陷</td><td>18 条（Critical 3 + Major 6 + Minor 6 + Trivial 3）</td><td>发现有效缺陷 18 个</td><td>✅ 不超</td></tr>
+<tr><td>接口用例</td><td>90 collected / 75 YAML</td><td>覆盖 80+ 核心接口</td><td>✅ 不超</td></tr>
+<tr><td>UI 场景</td><td>12 场景（POM 7 Page 类）</td><td>实现 12 个核心场景</td><td>✅</td></tr>
+<tr><td>CI workflow</td><td>2 workflow + 9 steps</td><td>接入 GitHub Actions</td><td>✅</td></tr>
+<tr><td>Locust 跑次</td><td>4 阶梯 × 3 场景 × 2 轮 = 24</td><td>3 场景阶梯压测 + 调优复测</td><td>✅</td></tr>
+<tr><td>性能报告</td><td>120 文件（24 × 5 类）</td><td>输出对比报告</td><td>✅</td></tr>
+<tr><td>Agent 用例</td><td>50 条（设计阶段）</td><td>50 条 Agent 测试用例</td><td>✅</td></tr>
+<tr><td>评测维度</td><td>4 维度</td><td>4 维度评测</td><td>✅</td></tr>
+<tr><td>测试场景</td><td>4 核心场景</td><td>4 个核心场景</td><td>✅</td></tr>
+</tbody>
+</table>
+
+<h3>3.2 动词控制（避开"领导岗"用词）</h3>
+<table>
+<thead><tr><th>❌ 别写</th><th>✅ 改成</th></tr></thead>
+<tbody>
+<tr><td>主导、负责整个、统筹</td><td><strong>参与、协助、独立负责XX模块</strong></td></tr>
+<tr><td>覆盖率 95%</td><td><strong>覆盖核心场景</strong></td></tr>
+<tr><td>搭建完整测试体系</td><td><strong>搭建模块测试用例库</strong></td></tr>
+<tr><td>提升效率 30%</td><td><strong>显著提升效率</strong></td></tr>
+<tr><td>设计整套方案</td><td><strong>参与方案设计</strong></td></tr>
+</tbody>
+</table>
+
+<h3>3.3 技术栈深浅分级</h3>
+<table>
+<thead><tr><th>✅ 可写（真会）</th><th>⚠️ 慎写（深问露馅）</th><th>❌ 别写</th></tr></thead>
+<tbody>
+<tr><td>Python / pytest</td><td>Jenkins MCP 工作原理</td><td>LangGraph 内部源码</td></tr>
+<tr><td>Playwright + POM（主攻栈）</td><td>RAG 向量检索原理</td><td>LLM 训练/微调</td></tr>
+<tr><td>YAML 数据驱动</td><td>性能调优细节</td><td>自研框架源码</td></tr>
+<tr><td>Allure</td><td>Locust 分布式压测</td><td>—</td></tr>
+<tr><td>Selenium（写"了解"）</td><td>Jenkins（写"了解"）</td><td>—</td></tr>
+</tbody>
+</table>
+
+<h3>3.4 resume.md 6 段结构</h3>
+<ol>
+<li><strong>基本信息</strong>：姓名 / 学校 / 学历 / 邮箱 / 手机 / GitHub / 求职意向</li>
+<li><strong>专业技能（10 条）</strong>：对标学长 senior-resume.pdf 骨架</li>
+<li><strong>项目经历</strong>：项目 1 STAR 5 句 + 项目 2 STAR 4 句</li>
+<li><strong>教育经历</strong>：学校 / 学历 / 专业 / GPA</li>
+<li><strong>实习/实践经历</strong>：如无则写"项目经历 + 课程设计"替代</li>
+<li><strong>自我评价</strong>：三段式（专业能力 + 学习能力 + 团队协作）</li>
+</ol>
+</section>
+
+<section id="sec-3repos">
+<h2>4. 3 个 GitHub 仓库 README 设计</h2>
+
+<h3>4.1 仓库矩阵</h3>
+<table>
+<thead><tr><th>仓库名</th><th>定位</th><th>内容</th><th>目标项目</th></tr></thead>
+<tbody>
+<tr><td><code>mall4j-test-practice</code></td><td>测试设计与产出</td><td>用例 + 缺陷 + 报告 + 教学</td><td>mall4j ⭐5.2k AGPL-3.0</td></tr>
+<tr><td><code>mall4j-auto-test</code></td><td>自动化工具链</td><td>接口 + UI + CI + 性能</td><td>mall4j ⭐5.2k AGPL-3.0</td></tr>
+<tr><td><code>agent-eval-practice</code></td><td>AI Agent 评测</td><td>方法论 + 用例 + LLM-as-Judge</td><td>mall-ai ⭐79 Apache-2.0</td></tr>
+</tbody>
+</table>
+
+<h3>4.2 README 8 段标准结构</h3>
+<pre><code>1. 仓库一句话（定位 + 目标项目 + 作者）
+2. 仓库内容（目录表 + 简历对应）
+3. 简历可写句子（STAR 或要点）
+4. 简历数字校验表（×2 原则）
+5. 核心交付物清单（树状目录）
+6. 简历深问应对（5 类高频追问 + 答案框架）
+7. 如何使用本仓库（命令清单）
+8. 关联仓库 + 协议 + 联系方式
+</code></pre>
+
+<h3>4.3 init-repo.sh 三模式</h3>
+<pre><code>bash init-repo.sh test-practice   # 填充功能用例 + 缺陷库 + 报告
+bash init-repo.sh auto-test       # 填充接口 + UI + CI + 压测
+bash init-repo.sh agent-eval      # 填充 Agent 方法论 + 用例 + 评测占位
+</code></pre>
+
+<p class="highlight">关键设计：init-repo.sh 把工作区产物（test-cases/api-auto/、.github/workflows/、lessons/、learning-records/）<strong>按目标仓库选择性复制</strong>——<code>mall4j-test-practice</code> 拿测试用例 + 教学，<code>mall4j-auto-test</code> 拿自动化代码 + CI，<code>agent-eval-practice</code> 是占位（待 D12-D13 落地）。</p>
+</section>
+
+<section id="sec-flow">
+<h2>5. 投递闭环流程图</h2>
+
+<pre class="mermaid">
+flowchart TB
+    A[13/13 features done<br/>harness 100/100] --> B[GitHub 建 3 仓库]
+    B --> C[clone 空仓 + init-repo.sh 三模式]
+    C --> D[git commit + push]
+    D --> E[GitHub Actions 触发 CI<br/>auto-test 仓库绿勾]
+    E --> F[简历 v3 投递<br/>实习僧/BOSS 日常实习]
+    F --> G[面试反馈]
+    G --> H{零实习 -> 真实实习}
+    H -->|是| I[实习经历填简历]
+    H -->|否| J[补 D12-D13 mall-ai<br/>独立 harness]
+    I --> K[2027 春招全力冲刺]
+    J --> K
+</pre>
+
+<h3>5.1 时间节点</h3>
+<table>
+<thead><tr><th>阶段</th><th>时间</th><th>动作</th><th>定位</th></tr></thead>
+<tbody>
+<tr><td>日常实习</td><td>M2 达标后立即（已达成）</td><td>滚动投递，每周 15-20 家</td><td>最高优先级</td></tr>
+<tr><td>秋招</td><td>2026-09 ~ 2026-11</td><td>同步投，中厂为主</td><td>刷面试经验</td></tr>
+<tr><td>春招</td><td>2027-02 ~ 2027-04</td><td>全力冲刺</td><td>决胜局</td></tr>
+</tbody>
+</table>
+
+<p class="highlight">⚠️ 投递纪律：M2 即最低可投状态（接口+UI 自动化+CI 绿勾），不等"完美"。投递与后续阶段并行。</p>
+</section>
+
+<section id="sec-interview">
+<h2>6. 5 类高频追问 + 答案框架</h2>
+
+<h3>6.1 追问 1：为什么选 mall4j 这个项目？</h3>
+<p><strong>答案框架（3 段）</strong>：</p>
+<ol>
+<li><strong>业务贴近</strong>：B2C 电商场景，和真实业务最接近，技术栈主流</li>
+<li><strong>体量合适</strong>：⭐5.2k star，文档完备，Swagger / API / admin 后台一应俱全，<strong>能扛得住深入追问</strong></li>
+<li><strong>避免重复造轮子</strong>：不自己写 demo 项目练手，<strong>直接基于成熟开源项目做测试实战</strong>，产出物可验证</li>
+</ol>
+
+<h3>6.2 追问 2：18 个缺陷怎么发现的？</h3>
+<p><strong>答案框架（3 段）</strong>：</p>
+<ol>
+<li><strong>静态分析</strong>：读 Controller 注解 + Param 字段约束 + Service 实现 + Security 配置（AGPLv3 边界：仅基于源码静态分析，不改源码）</li>
+<li><strong>业务反推</strong>：从状态机推异常路径（如订单从待付款→已取消的退款链路）</li>
+<li><strong>场景组合</strong>：多条件组合下未覆盖的角落（如支付超时 + 自动取消 + 库存回滚）</li>
+</ol>
+
+<h3>6.3 追问 3：性能瓶颈怎么定位和调优的？</h3>
+<p><strong>答案框架（3 段定位 + 1 轮调优）</strong>：</p>
+<ol>
+<li><strong>看 TPS 拐点</strong>：TPS 不再随并发增长 → 瓶颈出现</li>
+<li><strong>看 P99 退化曲线</strong>：P99 急剧上升 → 排队/超时</li>
+<li><strong>看错误率类型</strong>：连接超时 → 线程池满 / 5xx → 代码问题 / 4xx → 参数问题</li>
+<li><strong>调优决策树</strong>：线程池满 → Tomcat threads max 200→400；连接池满 → HikariCP 10→30；缓存连接满 → Lettuce 6→20；GC 频繁 → JVM -Xmx1g + G1GC</li>
+</ol>
+
+<h3>6.4 追问 4：接口自动化框架怎么搭的？</h3>
+<p><strong>答案框架（5 层架构）</strong>：</p>
+<ol>
+<li><strong>common 层</strong>：base_api（HTTP 客户端）+ assertion（5 类业务码）+ AES 加密兼容 + YAML 加载器</li>
+<li><strong>data 层</strong>：19 个 YAML 文件 / 75+ 用例 / {{var}} 模板替换 / SafeDict 缺 key 兜底</li>
+<li><strong>api 层</strong>：18 个接口 wrapper 类（每个接口一个方法）</li>
+<li><strong>testcases 层</strong>：18 个 pytest 文件 / 参数化扩列 / allure 装饰器</li>
+<li><strong>报告层</strong>：Allure HTML + severity 分级 + 历史趋势</li>
+</ol>
+
+<h3>6.5 追问 5：怎么测试 AI Agent？</h3>
+<p><strong>答案框架（4 维度）</strong>：</p>
+<ol>
+<li><strong>理解 Agent 工作模式</strong>：意图理解 → 工具选择 → 执行 → 返回结果（<strong>不深问 LangGraph 原理</strong>）</li>
+<li><strong>4 个评测维度</strong>：事实性（回答准确）/工具选择率（选对工具）/拒答率（不知道时说不知道）/幻觉率（不编造）</li>
+<li><strong>测试用例设计</strong>：正常/异常/边界/对抗 4 类，每类至少 8 条</li>
+<li><strong>LLM-as-Judge</strong>：用大模型当裁判，<strong>自动评估输出质量</strong></li>
+</ol>
+
+<p class="highlight">⚠️ 降级策略：mall4j 鉴权压测如果跑不通 → 说"做了未鉴权压测做基线，鉴权场景写了脚本待接入，核心是 Locust + 阶梯加压方法"。</p>
+</section>
+
+<section id="sec-quiz">
+<h2>7. 3 题 quiz 自检</h2>
+
+<div class="quiz">
+<p><strong>Q1：</strong>mall4j 13/13 features done 后，下一步最高优先级是什么？</p>
+<details>
+<summary>答案</summary>
+<p><strong>GitHub 建 3 仓库 + 用 init-repo.sh 三模式填充 + push + 投递简历</strong>。M2 即最低可投状态，13/13 完成时更应立即投递。M4 mall-ai 本地跑通是独立项目独立 harness，不在 mall4j 范围。</p>
+</details>
+</div>
+
+<div class="quiz">
+<p><strong>Q2：</strong>简历"覆盖 80+ 核心接口"对应的实际产出是？为什么这样写？</p>
+<details>
+<summary>答案</summary>
+<p><strong>实际产出</strong>：pytest --collect-only 90 tests / 19 YAML / 75+ 接口用例。<br><strong>为什么这样写</strong>：① "覆盖 80+" 比 "75" 更稳妥，留 ×2 原则余量；② "核心接口" 暗示是重要业务接口而非全量；③ "覆盖" 动词比 "执行" / "实现" 更符合实习岗定位（参考 PROJECT_TARGET_BOOK §5.1 动词控制表）。</p>
+</details>
+</div>
+
+<div class="quiz">
+<p><strong>Q3：</strong>3 个 GitHub 仓库各自的定位和内容是什么？为什么分 3 个？</p>
+<details>
+<summary>答案</summary>
+<p><strong>mall4j-test-practice</strong>：测试设计与产出（用例 + 缺陷 + 报告 + 教学）——证明测试设计能力。<br><strong>mall4j-auto-test</strong>：自动化工具链（接口 + UI + CI + 性能）——证明自动化能力。<br><strong>agent-eval-practice</strong>：AI Agent 评测（方法论 + 用例 + LLM-as-Judge）——证明 AI 测试能力。<br><strong>为什么分 3 个</strong>：① 单一仓库 README 太长，面试官扫读效率低；② 协议不同（mall4j 是 AGPL-3.0，mall-ai 是 Apache-2.0），分开管理避免混淆；③ 能力维度分离：测试设计 / 自动化实现 / AI 测试 是测开岗 3 个核心能力维度。</p>
+</details>
+</div>
+</section>
+
+<section id="sec-next">
+<h2>8. 下一步：M4 mall-ai 独立 harness</h2>
+
+<h3>8.1 mall4j vs mall-ai 边界</h3>
+<table>
+<thead><tr><th>维度</th><th>mall4j（本仓）</th><th>mall-ai（独立仓）</th></tr></thead>
+<tbody>
+<tr><td>项目</td><td>gz-yami/mall4j ⭐5.2k</td><td>Eleven617/mall-ai ⭐79</td></tr>
+<tr><td>协议</td><td>AGPL-3.0</td><td>Apache-2.0</td></tr>
+<tr><td>角色</td><td>测试开发主练手载体</td><td>AI Agent 评测练手载体</td></tr>
+<tr><td>里程碑</td><td>M0-M5 13 features（已完成）</td><td>M4 D12-D13 待启动</td></tr>
+<tr><td>仓库</td><td><code>D:/26测试/mall4j/</code></td><td><code>D:/26测试/mall-ai-after-sales-platform/</code></td></tr>
+<tr><td>resume 段位</td><td>项目 1（STAR 5 句）</td><td>项目 2（STAR 4 句）</td></tr>
+</tbody>
+</table>
+
+<h3>8.2 M4 D12-D13 任务预告</h3>
+<ul>
+<li><strong>D12 周五</strong>：docker-compose 本地部署 mall-ai 平台（4 服务） + 4 核心场景冒烟</li>
+<li><strong>D13 周六</strong>：50 条 Agent YAML 用例库 + LLM-as-Judge 4 维度评分脚本实跑 + 4 维度报告</li>
+</ul>
+
+<h3>8.3 本课沉淀的可复用 SOP</h3>
+<ol>
+<li><strong>数字 ×2 原则 + 简历 6 段结构</strong>：可复用到任何求职简历</li>
+<li><strong>3 仓库 README 8 段结构</strong>：可复用到任何 GitHub 背书项目</li>
+<li><strong>init-repo.sh 三模式</strong>：可复用到任何"从主仓拆子仓"的场景</li>
+<li><strong>5 类高频追问答案框架</strong>：可复用到任何测开岗面试</li>
+</ol>
+</section>
+
+<footer class="lesson-footer">
+<p>上一课：<a href="0016-stepped-stress-tuning.html">第 16 课 阶梯压测 + 瓶颈调优</a></p>
+<p>下一课：<a href="0018-mall-ai-intro.html">第 18 课 mall-ai 本地跑通实测（待 D12 落地）</a></p>
+<p>速查卡：<a href="../reference/0017-complete-recap-cheatsheet.html">0017-complete-recap-cheatsheet.html</a></p>
+<p>学习记录：<a href="../learning-records/0017-complete-recap.md">0017-complete-recap.md</a></p>
+<p class="footer-meta">第 17 课 · 13/13 收官 · 2026-09-14 · AGENTS.md §不变量 1/3 严格遵守</p>
+</footer>
+
+</div>
+</body>
+</html>

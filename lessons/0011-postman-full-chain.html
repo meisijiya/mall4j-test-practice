@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 11 课 Postman 完整链路——40 条用例 + 探针 + 鉴权 + 异常边界</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+    /* mermaid 容器宽度（与正文一致） */
+    pre.mermaid { background: #fafafa; padding: 0.6em; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 11 课：Postman 完整链路——40 条用例 + 探针 + 鉴权 + 异常边界</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 11 课</span>
+    <span class="tag">难度 ★★★★☆</span>
+    <span class="tag">时长 45 分钟</span>
+    <span class="tag">实战对象 M1-D5-001 Postman Collection v3.0</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L09 骨架 20 条 → L11 完整 40 条）</a></li>
+      <li><a href="#sec2">为什么测试工程师必须懂完整链路 + 鉴权 + 异常边界</a></li>
+      <li><a href="#sec3">6 件产物速览：Collection v3.0 + Env + 40 用例文档 + 实施说明 + 生成器 + 验收脚本</a></li>
+      <li><a href="#sec4">核心概念 × 5（探针 / 5 业务码 / 写回双写 / 6 folder / 三种场景）</a></li>
+      <li><a href="#sec5">动手练：5 分钟迷你任务（任选 3）</a></li>
+      <li><a href="#sec6">课堂小测 + 收官提示</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L09 骨架 20 条 → L11 完整 40 条）</h2>
+  <p>第 9 课把 20 条接口用例资产化到 Postman Collection v2.1 + Environment + 2 JS snippet + 文档——<strong>骨架版</strong>。本课换条腿：把这套资产化思路升级成<strong>完整链路版</strong>——40 条用例覆盖公开 / 登录 / 购物车 / 订单 / 支付 / 鉴权异常边界 6 个 folder,并用<strong>探针机制</strong>解决 D4 v2.1 留下的"硬编码 prodId/skuId 跨商品"烂账。</p>
+  <ul>
+    <li><strong>第 9 课（Postman Collection v2.1 骨架）</strong>：5 件产物（55 KB Collection + 1.8 KB Env + 974 B + 841 B + 13 KB 文档），5 folder × 20 用例,Runner 顺序依赖。</li>
+    <li><strong>本课（Postman Collection v3.0 完整链路）</strong>：<strong>6 件产物</strong>（110 KB Collection + 2.1 KB Env + 17 KB 40 用例文档 + 264 行实施说明 + 30 KB 生成器 + 3.4 KB 验收脚本），6 folder × 40 用例，<strong>探针 + 双写 + 5 业务码模板</strong> 3 大升级。</li>
+    <li><strong>L09 → L11 的进阶路径</strong>：骨架（20 条入口）→ 完整链路（40 条主流程 + 鉴权 + 异常 + 边界）；L09 是"能跑"，L11 是"跑得稳 + 跑得对 + 跑得全"。</li>
+    <li><strong>本课的承诺</strong>：从 Postman Runner 手动点 Send 升级到 <code>newman run</code> 一键跑 40 条 + 看 38-40 PASS（黄金路径）或 30-34 PASS（降级路径）——这<strong>是测试岗简历的硬通货</strong>。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    L09 = "<strong>接口用例资产化入门</strong>"（20 条骨架 + 5 folder），L11 = "<strong>完整链路工程化</strong>"（40 条 + 6 folder + 探针 + 5 业务码模板）。前者决定能不能在 Postman 里跑过；后者决定能不能在 CI 里 5 分钟拿到 38+ PASS 的报告。
+  </div>
+
+  <h2 id="sec2">2. 为什么测试工程师必须懂完整链路 + 鉴权 + 异常边界</h2>
+  <p>20 条接口用例只能写"会用 Postman"；40 条完整链路 + 鉴权 + 异常边界才能写"<strong>独立设计接口测试方案</strong>"——这是测试岗简历上<strong>必看</strong>的物证。3 个理由：</p>
+  <table>
+    <thead><tr><th>#</th><th>理由</th><th>对应简历/工作场景</th><th>本课落地</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>完整链路覆盖</strong></td>
+        <td>"独立设计 40 条接口用例覆盖公开 / 登录 / 购物车 / 订单 / 支付 5 大链路 + 鉴权 / 异常边界"——面试官必看的覆盖度</td>
+        <td><code>mall4j-api-collection.json</code> 110 KB / 2907 行 v3.0 schema；6 folder × 40 items</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>AuthFilter 拦截范围理解</strong></td>
+        <td>"理解 Sa-Token 拦截器对 <code>/p/*</code> 路径的鉴权规则并设计 5 条鉴权用例验证"——安全测试的核心能力</td>
+        <td>Folder 6 含 5 条鉴权用例（L6.1-L6.5）+ Pre-request <code>unset('token')</code> 强制无 token</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>5 业务码断言模板</strong></td>
+        <td>"设计 5 种业务码断言（T-A 成功 / T-B 业务异常 / T-D @NotBlank / T-E 服务异常 / T-F 宽松）覆盖 26 + 3 + 2 + 1 + 8 = 40 条用例"——边界场景全覆盖</td>
+        <td><code>api-40-cases.md §1</code> 顶层用例分布表 + <code>M1-D5-001-impl-notes.md §1.2</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>MISSION.md 主线</strong>（第 6 段"用户目标"）：用户在秋招 2026-09~11 投递<strong>测试岗</strong>时,"完整链路接口测试"是简历加分项——不是会用 Newman CLI 跑 20 条,而是<strong>能用 40 条覆盖主流程 + 鉴权 + 异常边界 + 状态机</strong>,并用探针机制让零 fixture 也能跑出 30+ PASS。M1-D5-001 就是这条主线的<strong>产物</strong>。</p>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "基于 Postman Collection v3.0 schema 独立设计 mall4j 用户端 40 条完整链路接口用例（含 8 条公开 + 3 条认证 + 8 条购物车 + 8 条订单 + 2 条支付 + 11 条鉴权 / 异常 / 边界），用 L3.1 + L3.2 探针请求自动修正 D4 硬编码 prodId/skuId 跨商品问题，5 业务码断言模板覆盖 26+3+2+1+8 = 40 条全场景，支持 Newman CLI 一键 Runner"——这句直接写进 M1 项目经验。
+  </div>
+
+  <h2 id="sec3">3. 6 件产物速览：Collection v3.0 + Env + 40 用例文档 + 实施说明 + 生成器 + 验收脚本</h2>
+  <p>来源：<code>test-cases/postman/</code> + <code>doc/3-API接口/</code> + <code>test-cases/api-40-cases.md</code>。本课 6 件产物全部是<strong>纯文本</strong>,无二进制:</p>
+  <table>
+    <thead><tr><th>产物</th><th>路径</th><th>行数</th><th>字节</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>Collection JSON</strong></td>
+        <td><code>test-cases/postman/mall4j-api-collection.json</code></td>
+        <td>2907</td>
+        <td>110 KB</td>
+        <td>v3.0 schema；6 个 folder × 40 条用例；Pre-request + Tests 内联到每 item.exec</td>
+      </tr>
+      <tr>
+        <td><strong>Environment JSON</strong></td>
+        <td><code>test-cases/postman/mall4j-api-environment.json</code></td>
+        <td>109</td>
+        <td>2.1 KB</td>
+        <td>20 个变量：base_url / token / prodId / skuId / basketId / orderNumber / addrId / otherUserAddrId / orderNumberPaid / otherUserOrderNumber / ts / nonce 等</td>
+      </tr>
+      <tr>
+        <td><strong>40 用例文档</strong></td>
+        <td><code>test-cases/api-40-cases.md</code></td>
+        <td>602</td>
+        <td>17 KB</td>
+        <td>每条用例的 10 字段（编号 / 路径 / Method / @Operation / Param / 期望业务码 / 风险 / 依赖前置 / D4 差异）+ 5 段表格（分布 / 场景 / 数据流 / 风险）</td>
+      </tr>
+      <tr>
+        <td><strong>实施说明</strong></td>
+        <td><code>doc/3-API接口/M1-D5-001-impl-notes.md</code></td>
+        <td>264</td>
+        <td>9.7 KB</td>
+        <td>5 项关键设计决策 + D4 vs D5 差异对照表 + 8 项验收清单 + 5 个已知坑</td>
+      </tr>
+      <tr>
+        <td><strong>生成器</strong></td>
+        <td><code>test-cases/postman/generate-collection-v3.py</code></td>
+        <td>~700</td>
+        <td>32.4 KB</td>
+        <td>Python 幂等生成器；改 ITEMS 列表后 <code>python3 generate-collection-v3.py</code> 一键重生</td>
+      </tr>
+      <tr>
+        <td><strong>验收脚本</strong></td>
+        <td><code>test-cases/postman/validate-v3.py</code></td>
+        <td>~80</td>
+        <td>3.4 KB</td>
+        <td>断言 6 folder / 40 items / 20 vars / 探针写回 / 5 业务码模板各 ≥ 1 次</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>关键设计</strong>：</p>
+  <ul>
+    <li><strong>生成器优先于手改 JSON</strong>——v3.0 collection 是 30 KB Python 生成器的输出物；下次 ITEMS 列表调整后 <code>python3 generate-collection-v3.py</code> 一键重生,避免 PUT 行号漂移 / 字段缺失 / 多写少写。</li>
+    <li><strong>snippet 内联到每个 item.exec</strong>（不是外链 <code>--test-script</code>）——Postman v2.1 schema<strong>不支持外链 JS 引用</strong>,每个 item 必须把 snippet 完整贴进 <code>event.script.exec</code> 数组。Newman CLI 才支持 <code>--test-script</code> 外链；UI 模式必须内联。</li>
+    <li><strong>探针 L3.1 + L3.2 必须在购物车前</strong>——Runner 按 folder 顺序执行,L3.1 写回 prodId → L3.2 用 prodId 查 skuList 写回 skuId → L3.3 加购用真实 prodId/skuId。</li>
+  </ul>
+
+  <h2 id="sec4">4. 核心概念 × 5（探针 / 5 业务码 / 写回双写 / 6 folder / 三种场景）</h2>
+
+  <h3>4.1 概念 1：探针请求机制（L3.1 + L3.2 修 D4 跨商品问题）</h3>
+  <p>D4 v2.1 的<strong>致命伤</strong>：env 写死 <code>prodId=18</code> / <code>skuId=10</code>,但这两个在 mall4j 数据库中<strong>不匹配</strong>（prodId=18 是"手机壳"商品,skuId=10 是"数据线"商品）→ 加购 L3.3 永远 FAIL → 链路 L4.1/L4.2/L5.1 全部 SKIP/FAIL。</p>
+  <p>D5 v3.0 的修法：在 collection 内置<strong>2 条探针</strong>（L3.1 + L3.2）而不是写 <code>cart-fixture.sql</code>：</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant U as 测试用例
+    participant E as Environment
+    participant S as mall4j 后端
+    Note over U,S: L3.1 探针：取真实 prodId
+    U->>S: GET /prod/prodInfo?prodId=1
+    S-->>U: {code:"00000", data:{prodId:1, prodName:"..."}}
+    U->>E: pm.collectionVariables.set('prodId', 1)<br/>pm.environment.set('prodId', 1)
+    Note over U,S: L3.2 探针：取真实 skuId
+    U->>S: GET /sku/getSkuList?prodId={{prodId}}
+    S-->>U: {code:"00000", data:[{skuId:2, skuName:"..."}]}
+    U->>E: pm.collectionVariables.set('skuId', 2)<br/>pm.environment.set('skuId', 2)
+    Note over U,S: L3.3 加购用真实 prodId+skuId
+    U->>S: POST /p/shopCart/changeItem<br/>{prodId:{{prodId}}, skuId:{{skuId}}}
+    S-->>U: {code:"00000", data:{basketId:123}}
+    style U fill:#d4e6f1,stroke:#2874a6
+    style E fill:#fef9e7,stroke:#888
+    style S fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>探针核心代码</strong>（L3.1 写回 prodId）：</p>
+  <pre><code>// L3.1 Tests snippet（内联到 event.script.exec）
+if (typeof pm !== 'undefined' &amp;&amp; pm.response) {
+  try {
+    var _j = pm.response.json();
+    if (_j &amp;&amp; _j.data &amp;&amp; _j.data.prodId) {
+      pm.collectionVariables.set('prodId', String(_j.data.prodId));
+      if (pm.environment &amp;&amp; pm.environment.set) {
+        pm.environment.set('prodId', String(_j.data.prodId));
+      }
+      console.log('[M1-D5-001] prodId saved: ' + _j.data.prodId);
+    }
+  } catch(e) {
+    console.log('[M1-D5-001] prodId extract skip: ' + e.message);
+  }
+}</code></pre>
+  <div class="interview">
+    <div class="who">探针金句</div>
+    探针 = "<strong>用真实接口取代 fixture SQL</strong>"。零外部依赖 + 可重跑 + 降级友好（探针失败时降级到 env 默认值 prodId=1）。fixture SQL 仍可叠加：用户跑 <code>evidence/cart-fixture.sql</code> 后,env <code>otherUserAddrId / orderNumberPaid</code> 会被真实数据覆盖。
+  </div>
+
+  <h3>4.2 概念 2：5 业务码断言模板（T-A / T-B / T-D / T-E / T-F）</h3>
+  <p>mall4j 后端 <code>ServerResponseEntity</code> 的 <code>code</code> 字段是 <strong>String 类型</strong>（不是 Integer）。D5 v3.0 全部断言统一为 <code>String(j.code).to.eql('XXX')</code>。5 模板覆盖 40 条用例：</p>
+  <table>
+    <thead><tr><th>模板</th><th>业务码</th><th>含义</th><th>覆盖数</th><th>JS 模板</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>T-A</strong></td>
+        <td><code>'00000'</code></td>
+        <td>成功</td>
+        <td>26 条</td>
+        <td><code>pm.expect(String(j.code)).to.eql('00000');</code></td>
+      </tr>
+      <tr>
+        <td><strong>T-B</strong></td>
+        <td><code>'A00001'</code></td>
+        <td>业务异常（账号密码错 / count=0 / basketIds 空）</td>
+        <td>3 条</td>
+        <td><code>pm.expect(String(j.code)).to.eql('A00001');</code></td>
+      </tr>
+      <tr>
+        <td><strong>T-D</strong></td>
+        <td><code>'A00014'</code></td>
+        <td>@NotBlank 参数校验失败</td>
+        <td>2 条</td>
+        <td><code>pm.expect(String(j.code)).to.eql('A00014');</code></td>
+      </tr>
+      <tr>
+        <td><strong>T-E</strong></td>
+        <td><code>'A00005'</code></td>
+        <td>服务端异常（AES 解密失败 / 短信非手机号格式）</td>
+        <td>1 条</td>
+        <td><code>pm.expect(String(j.code)).to.eql('A00005');</code></td>
+      </tr>
+      <tr>
+        <td><strong>T-F</strong></td>
+        <td><code>!= '00000'</code></td>
+        <td>宽松（鉴权 401 / 短信默认关闭 / 状态机异常）</td>
+        <td>8 条</td>
+        <td><code>pm.expect(String(j.code)).to.not.eql('00000');</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>T-F 宽松断言示例</strong>（L6.1 未登录访问用户信息）：</p>
+  <pre><code>// L6.1 Tests snippet
+if (typeof pm !== 'undefined' &amp;&amp; pm.test) {
+  pm.test('HTTP 401 Unauthorized', function () {
+    pm.response.to.have.status(401);
+  });
+  pm.test('业务码 != 00000', function () {
+    var j = pm.response.json();
+    pm.expect(String(j.code)).to.not.eql('00000');
+  });
+}</code></pre>
+  <div class="interview">
+    <div class="who">业务码金句</div>
+    "<strong>业务码是字符串不是数字</strong>"——这是 mall4j 后端 <code>ServerResponseEntity</code> 的 Java 类型决定的。Postman 默认 <code>pm.expect(j.code).to.eql(200)</code> 永远 FAIL（"00000" ≠ 200）。显式 <code>String(j.code)</code> 转换是 D5 的铁律。
+  </div>
+
+  <h3>4.3 概念 3：写回 + 双写策略（basketId / orderNumber / addrId）</h3>
+  <p>Newman 运行时,<code>pm.response.json()</code> 在 pre-request 和 test 阶段都能访问；但 header 引用 <code>{{token}}</code> 时,<strong>优先从 environment 读取</strong>（collectionVariables 在 header 解析前可能还没生效）。D4 v2.1 已踩坑：单写 <code>pm.collectionVariables.set('token', ...)</code>,导致下游用例 header <code>{{token}}</code> 解析失败。</p>
+  <p>D5 v3.0 所有"写回"操作都是<strong>双写</strong>（collectionVariables + environment）：</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant T as Tests snippet
+    participant CV as collectionVariables
+    participant EV as environment
+    participant H as 下游用例 header
+    T->>CV: pm.collectionVariables.set('basketId', 123)
+    T->>EV: pm.environment.set('basketId', 123)
+    Note over CV,EV: 双写保证任意作用域都取得到
+    H->>EV: 读 {{basketId}} 注入 header/body
+    H->>CV: 备用（fallback）
+    style T fill:#fadbd8,stroke:#c0392b
+    style CV fill:#d4e6f1,stroke:#2874a6
+    style EV fill:#d4e6f1,stroke:#2874a6
+    style H fill:#eafaf1,stroke:#888</pre>
+  <p><strong>L3.3 写回 basketId 代码</strong>：</p>
+  <pre><code>// L3.3 Tests snippet（加购成功 → 写回 basketId）
+if (typeof pm !== 'undefined' &amp;&amp; pm.response) {
+  try {
+    var _j = pm.response.json();
+    if (_j &amp;&amp; _j.data &amp;&amp; (_j.data.basketId || _j.data.id)) {
+      var _v = _j.data.basketId || _j.data.id;
+      pm.collectionVariables.set('basketId', String(_v));
+      if (pm.environment &amp;&amp; pm.environment.set) {
+        pm.environment.set('basketId', String(_v));
+      }
+    }
+  } catch(e) { console.log('[M1-D5-001] basketId extract skip'); }
+}</code></pre>
+  <p><strong>3 个写回点的链路位置</strong>：</p>
+  <ul>
+    <li><strong>L3.3 加购成功 → 写回 basketId</strong>（Folder 3 内,L4.1 / L4.5 / L4.6 / L4.7 / L4.8 / L5.1 / L5.2 全部依赖）</li>
+    <li><strong>L4.2 提交订单 → 写回 orderNumber</strong>（Folder 4 内,L4.5 / L4.6 / L4.7 / L4.8 全部依赖）</li>
+    <li><strong>登录 L2.1 → 写回 token</strong>（Folder 2 内,所有 <code>/p/*</code> 私有接口的 Authorization header 依赖）</li>
+  </ul>
+  <div class="interview">
+    <div class="who">双写金句</div>
+    "<strong>Newman 解析 {{var}} 优先读 environment,其次 collectionVariables</strong>"——这是 Postman 沙箱的隐藏规则。单写 collectionVariables 在某些时序下会导致 header 注入失败（变量还未生效）。双写是 Newman 已知坑的标准解法。
+  </div>
+
+  <h3>4.4 概念 4：6 folder 链路依赖（与 L09 5 folder 对比）</h3>
+  <p>v3.0 把 D4 v2.1 的 5 folder 升级成 6 folder：支付（Folder 4.3）拆出成独立 Folder 5,让"提交→支付→确认收货"链路一目了然。Runner 按 JSON 数组顺序执行,这个顺序不是任意的——它必须满足"<strong>token 提取 → prodId/skuId 探针 → basketId 写回 → orderNumber 写回</strong>"的依赖链：</p>
+  <pre class="mermaid">
+graph TD
+    A["1.公开接口<br/>8 条 无需 token"] --> B["2.登录/认证<br/>3 条 写回 token"]
+    B --> C["3.购物车<br/>8 条 L3.1+L3.2 探针<br/>L3.3 写回 basketId"]
+    C --> D["4.订单<br/>8 条 L4.2 写回 orderNumber"]
+    D --> E["5.支付<br/>2 条 依赖 orderNumber"]
+    B --> F["6.鉴权/异常/边界<br/>11 条 混合 无依赖"]
+    C --> F
+    D --> F
+    style B fill:#fadbd8,stroke:#c0392b
+    style C fill:#fadbd8,stroke:#c0392b
+    style D fill:#fadbd8,stroke:#c0392b
+    style E fill:#d4e6f1,stroke:#2874a6
+    style F fill:#fef9e7,stroke:#888</pre>
+  <p><strong>L09 5 folder vs L11 6 folder 对比</strong>：</p>
+  <table>
+    <thead><tr><th>L09 5 folder</th><th>L11 6 folder</th><th>变化</th></tr></thead>
+    <tbody>
+      <tr><td>1.公开接口 (8)</td><td>1.公开接口 (8)</td><td>不变</td></tr>
+      <tr><td>2.登录/认证 (3)</td><td>2.登录/认证 (3)</td><td>不变</td></tr>
+      <tr><td>3.购物车 (3)</td><td>3.购物车 (8)</td><td>+5（含 2 探针 + 减数 + 删除 + 清空 + 总计）</td></tr>
+      <tr><td>4.订单/支付 (4)</td><td>4.订单 (8) + 5.支付 (2)</td><td>支付拆出,订单扩到 8 条</td></tr>
+      <tr><td>5.异常/边界 (2)</td><td>6.鉴权/异常/边界 (11)</td><td>+9（5 鉴权 + 4 状态机 / 服务异常）</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">folder 设计金句</div>
+    "<strong>Folder 数 = 业务链路节点数 + 1（兜底）</strong>"——L09 的 5 folder 把"支付"塞进 Folder 4 内部,L11 拆成独立 Folder 5,让链路依赖在 folder 边界上一目了然。Folder 6 是"<strong>跨链路的负面用例集合</strong>"——鉴权 / 状态机 / 服务异常,这些不依赖主链路时序。
+  </div>
+
+  <h3>4.5 概念 5：黄金 / 降级 / 失败 三种场景决策树</h3>
+  <p>D5 v3.0 的 40 条用例在不同环境准备度下,PASS 分布差异巨大。<strong>设计时必须把"降级路径"也考虑进去</strong>——不能假设用户启了 8086 + 注了 fixture + admin 启了 8085：</p>
+  <pre class="mermaid">
+graph TD
+    Start(["用户跑 Newman"]) --> Q1{"8086 启了?"}
+    Q1 -- "否" --> Fail["失败路径<br/>0 PASS / 40 FAIL<br/>（HTTP 连接失败）"]
+    Q1 -- "是" --> Q2{"fixture SQL 注了?"}
+    Q2 -- "否" --> Degrade["降级路径<br/>30-34 PASS<br/>6-10 FAIL/SKIP"]
+    Q2 -- "是" --> Q3{"admin 8085 启了?"}
+    Q3 -- "否" --> Degrade2["降级路径 +1<br/>31-35 PASS<br/>L4.7 收货 FAIL"]
+    Q3 -- "是" --> Gold["黄金路径<br/>38-40 PASS<br/>0-2 FAIL"]
+    style Fail fill:#fadbd8,stroke:#c0392b
+    style Degrade fill:#fef9e7,stroke:#888
+    style Degrade2 fill:#fef9e7,stroke:#888
+    style Gold fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>三种场景的 PASS 分布表</strong>（来源 <code>api-40-cases.md §2</code>）：</p>
+  <table>
+    <thead><tr><th>场景</th><th>触发条件</th><th>预计 PASS</th><th>预计 FAIL/SKIP</th><th>关键判定</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong>黄金路径</strong></td>
+        <td>启 8086 + 注 fixture + admin 8085 启</td>
+        <td>38-40 / 40</td>
+        <td>0-2</td>
+        <td>L4.7 收货 / L6.6-L6.7 跨用户 100% PASS</td>
+      </tr>
+      <tr>
+        <td><strong>降级路径</strong></td>
+        <td>启 8086 但不注 fixture（仅靠探针）</td>
+        <td>30-34 / 40</td>
+        <td>6-10</td>
+        <td>L3.6 / L3.7 / L4.3 / L4.4 降级 100% PASS（仅依赖 token）</td>
+      </tr>
+      <tr>
+        <td><strong>失败路径</strong></td>
+        <td>8086 未启</td>
+        <td>0 / 40</td>
+        <td>40（HTTP 失败）</td>
+        <td>鉴权类（L6.1-L6.5）仍 FAIL,因依赖 HTTP 401 而非业务码</td>
+      </tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">场景设计金句</div>
+    "<strong>好用例集 = 黄金路径 38-40 + 降级路径 30-34 + 失败路径 0</strong>"——3 个 PASS 分布都"有意义"。如果 40 条全 PASS,可能 fixture 注得太重；如果 0 PASS,可能鉴权类用例没设计对（应该 HTTP 401 而非业务码 00000）。
+  </div>
+
+  <h2 id="sec5">5. 动手练：5 分钟迷你任务（任选 3）</h2>
+  <p>学完概念后,5 分钟亲手跑一遍,<strong>这是 L11 的 win 产物</strong>——不需要后端启服务（公开 8 条 + 鉴权 5 条不需要 token 也能跑通或 FAIL 但请求结构可见）。</p>
+  <ol>
+    <li><strong>任务 A：打开 Collection v3.0</strong>——把 <code>test-cases/postman/mall4j-api-collection.json</code> 拖进 Postman,左侧 Collections 面板应看到 <strong>6 个 folder</strong>：1.公开接口 / 2.登录/认证 / 3.购物车 / 4.订单 / 5.支付 / 6.鉴权/异常/边界。<strong>截图 6 folder 列表</strong>存到 <code>learning-records/0011-postman-folders.png</code>。</li>
+    <li><strong>任务 B：跑 Folder 1 公开 + Folder 2 登录 = 11 条</strong>——点 "1.公开接口" folder → Run → 选 folder → Run;同样跑 "2.登录/认证"。Runner 报告应显示 8/8 passed（业务码 00000）+ 3/3 passed（含 L2.3 短信 != 00000）或全 FAIL（如果后端没启）。<strong>无后端也至少能看见 Runner 报告结构</strong>。</li>
+    <li><strong>任务 C：读探针 L3.1 + L3.2</strong>——展开 "3.购物车" → 点 "探针请求-取真实 prodId" → 点 Tests tab → 阅读写回 prodId 的 JS snippet → 理解 <code>pm.collectionVariables.set + pm.environment.set</code> 双写逻辑。</li>
+    <li><strong>任务 D：跑 Newman CLI</strong>（进阶）——终端跑 <code>NODE_PATH=$(npm root -g) newman run test-cases/postman/mall4j-api-collection.json -e test-cases/postman/mall4j-api-environment.json --reporters cli,html --reporter-html-export newman-report.html</code>,看 40 条用例的报告（含 6 folder 分组 + 写回日志）。</li>
+    <li><strong>任务 E：改业务码断言</strong>——随便挑 1 条 T-A 用例（如 L1.1 商品列表）→ 点 Tests tab → 把 <code>to.eql('00000')</code> 改成 <code>to.eql('A00001')</code> → Send → 看 Tests tab FAIL 行为。理解"<strong>断言错误是负向验证</strong>"。</li>
+  </ol>
+  <h3>5.1 验证标准</h3>
+  <ul>
+    <li>✅ 6 folder 列表截图清晰（folder 名称 + 条数可见）</li>
+    <li>✅ Runner 报告 8+3=11 条通过（后端启）<strong>或</strong> 11/11 failed 但请求结构可见（后端未启）</li>
+    <li>✅ 自己能复述 L3.1 探针的写回逻辑（prodId 双写到 collectionVariables + environment）</li>
+    <li>✅ Newman CLI 跑出 40 条用例的报告（哪怕全红也行）</li>
+    <li>✅ 改业务码断言后 Runner 报告 FAIL 标记正确</li>
+  </ul>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课,把任何卡点（探针请求的 prodId/skuId 来源 / 5 业务码模板的设计取舍 / 双写 collectionVariables+environment 的作用域差异 / 6 folder 拆分的链路语义 / 三种场景 PASS 分布的判定阈值）抛给你的 AI 教师追问——单点困惑往往牵出整条"完整链路接口测试"的工程链,问得越具体,回答越能反哺 M2-D7-001（pytest + YAML 数据驱动）+ M2-D8-001（CI 集成）的可扩展基座。
+  </div>
+
+  <h2 id="sec6">6. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案,做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>D5 v3.0 在 Folder 3 购物车加了 L3.1 + L3.2 两条探针请求,核心目的是?</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 增加 Newman 报告的 HTTP 请求数（凑数）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 自动从 <code>/prod/prodInfo</code> 和 <code>/sku/getSkuList</code> 取真实 prodId/skuId 写回 env,修正 D4 v2.1 硬编码 prodId=18/skuId=10 跨商品问题</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 测试 /prod/prodInfo 接口本身的业务码</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) 替代 fixture SQL 注入用户数据</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>D5 v3.0 的所有"写回"操作（token / basketId / orderNumber）都用双写策略,原因是什么?</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) Newman 解析 <code>{{var}}</code> 优先读 environment,其次 collectionVariables；单写 collectionVariables 在某些时序下会导致 header 注入失败</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) Postman UI 不支持 collectionVariables,只能写 environment</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 双写是为了让 5 业务码模板各能用一次</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) Newman 要求所有变量必须同时存在 environment 和 collectionVariables</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>D5 v3.0 的 5 业务码断言模板（T-A / T-B / T-D / T-E / T-F）共覆盖 40 条用例,以下哪种业务码属于 T-D（@NotBlank 参数校验）?</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) <code>'00000'</code>（成功）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) <code>'A00001'</code>（业务异常）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) <code>'A00014'</code>（@NotBlank 空字段）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) <code>'A00005'</code>（服务端异常）</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0010-pytest-requests-testing.html">第 10 课 pytest + requests 自动化</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><span style="color:var(--ink-mute);">预留：第 12 课 pytest + YAML + Playwright UI 自动化（M2-D7-001,待 M2-D7 完成时落地）</span></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../test-cases/postman/mall4j-api-collection.json">Postman Collection v3.0（test-cases/postman/mall4j-api-collection.json）</a></li>
+      <li><a href="../test-cases/postman/mall4j-api-environment.json">Environment 配置（test-cases/postman/mall4j-api-environment.json）</a></li>
+      <li><a href="../test-cases/api-40-cases.md">40 条接口用例文档（test-cases/api-40-cases.md）</a></li>
+      <li><a href="../doc/3-API接口/M1-D5-001-impl-notes.md">M1-D5-001 实施说明（doc/3-API接口/M1-D5-001-impl-notes.md）</a></li>
+      <li><a href="../test-cases/postman/generate-collection-v3.py">Collection v3.0 生成器（test-cases/postman/generate-collection-v3.py）</a></li>
+      <li><a href="../test-cases/postman/validate-v3.py">v3.0 验收脚本（test-cases/postman/validate-v3.py）</a></li>
+      <li><a href="../reference/0011-full-chain-cheatsheet.html">40 条用例速查卡（reference/0011-full-chain-cheatsheet.html）</a></li>
+      <li><a href="../CONTEXT.md">领域语言速查（CONTEXT.md §3 可测点速查）</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M1-D5-001 行）</a></li>
+    </ul>
+    <div>第 11 课到这里就完成了——L09（20 条骨架）+ L11（40 条完整链路）= mall4j 接口测试工程的"探针 + 双写 + 5 业务码模板"完整闭环。下一课（M2-D7-001 待落地）将把这套用例搬到 pytest + YAML + Playwright UI 自动化框架里。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=A(0), Q3=C(2) ===
+  var correctMap = { q1: '1', q2: '0', q3: '2' };
+
+  var chapterHint = {
+    q1: { href: '#sec4', text: '回到第 4 节：再读"探针请求机制" mermaid 流程图' },
+    q2: { href: '#sec4', text: '回到第 4 节：再读"写回 + 双写策略"' },
+    q3: { href: '#sec4', text: '回到第 4 节：再读"5 业务码断言模板"' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项,绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

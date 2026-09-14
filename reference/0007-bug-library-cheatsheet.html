@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>18 条预测缺陷速查卡 · 第 7 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* A4 打印优化 */
+    @media print {
+      body { font-size: 10pt; }
+      section.card { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3 { color: #000; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>18 条预测缺陷速查卡</h1>
+  <p class="meta">第 7 课 · A4 打印友好 · 5 大源码线索 + 三维分布表专用</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. AGPLv3 协议下"预测缺陷库"模式说明</h2>
+    <p>来源：<code>mall4j/LICENSE</code> + <code>AGENTS.md</code> 不变量 1 + <code>test-cases/M1-D3-001/bug-list.md</code> 头部说明。</p>
+    <table>
+      <thead>
+        <tr><th>维度</th><th>路径 A：执行后真实暴露</th><th>路径 B：源码静态分析预测（本课）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>证据强度</td>
+          <td>强（真实复现 + 截图 + 日志）</td>
+          <td>弱（基于源码推断 + 攻击步骤脑补）</td>
+        </tr>
+        <tr>
+          <td>依赖</td>
+          <td>需要 JDK17 + MySQL + Redis + docker-compose</td>
+          <td>只需要 IDEA + 能读 Java 源码</td>
+        </tr>
+        <tr>
+          <td>AGPLv3 边界</td>
+          <td>需要"修代码 + 复测"，直接碰本体源码</td>
+          <td>只"看 + 写文档"，不碰本体源码 ✓</td>
+        </tr>
+        <tr>
+          <td>数字</td>
+          <td>真实环境通常 5-10 个</td>
+          <td>本课 18 个 = 设计目标 ✓</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>三条底线</strong>：① 每条缺陷必须真实映射源码（行号精准）；② 攻击步骤必须可执行（URL + HTTP 方法 + Body + Header）；③ 修复建议必须落到具体 API / 注解 / 代码模式（非空话）。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 严重等级 × 优先级矩阵</h2>
+    <table>
+      <thead>
+        <tr><th>等级</th><th>定义</th><th>mall4j 例子</th><th>分布</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>Critical</strong></td><td>资金/鉴权/数据</td><td>BUG-002 鉴权 / BUG-011 状态机 / BUG-013 事务</td><td>3 条</td></tr>
+        <tr><td><strong>Major</strong></td><td>主链路不可用 / 绕鉴权</td><td>BUG-001 / 008 / 012 等</td><td>6 条</td></tr>
+        <tr><td><strong>Minor</strong></td><td>次要功能受影响</td><td>BUG-006 / 007 / 009 等</td><td>6 条</td></tr>
+        <tr><td><strong>Trivial</strong></td><td>文案/UI/体验</td><td>BUG-004 / 010 / 018</td><td>3 条</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead>
+        <tr><th>优先级</th><th>修复 SLA</th><th>典型场景</th><th>分布</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>P0</strong></td><td>24h 内</td><td>Critical 安全 / 资金</td><td>6 条</td></tr>
+        <tr><td><strong>P1</strong></td><td>1 周内</td><td>Major 影响主流程</td><td>6 条</td></tr>
+        <tr><td><strong>P2</strong></td><td>1 月内</td><td>Minor 可优化点</td><td>4 条</td></tr>
+        <tr><td><strong>P3</strong></td><td>有空再修</td><td>Trivial 文案</td><td>2 条</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>决策规则</strong>：Critical 全 P0（鉴权/资金/数据类不能放）；Major 中影响主链路 → P0（注册/购物车/订单），次链路 → P1；Minor 中影响数据/隐私 → P1，性能/兼容 → P2。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 5 大源码线索 checklist（预测缺陷的扫描器）</h2>
+    <table>
+      <thead>
+        <tr><th>线索</th><th>扫描动作</th><th>典型 bug_id</th><th>风险指纹</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>① 弱约束 Param</strong></td>
+          <td>打开 Param 实体类，看字段注解：只有 @Schema 没有 @NotBlank/@Pattern/@Size → 风险</td>
+          <td>BUG-001 注册无格式校验</td>
+          <td>第 24-48 行字段全部仅 @Schema</td>
+        </tr>
+        <tr>
+          <td><strong>② 鉴权链缺口</strong></td>
+          <td>看 Controller 方法签名 + 方法体首行：无 @SaCheckLogin / SecurityUtils.getUser() → 风险</td>
+          <td>BUG-002 改密未鉴权</td>
+          <td>第 78-100 行 updatePwd 无注解</td>
+        </tr>
+        <tr>
+          <td><strong>③ 状态机守卫</strong></td>
+          <td>看 Order 实体是否有 @Version；状态变更 SQL 是否带 where version=? → 风险</td>
+          <td>BUG-014 取消状态机无乐观锁</td>
+          <td>第 139 行 Objects.equals + 无 version</td>
+        </tr>
+        <tr>
+          <td><strong>④ 事务边界</strong></td>
+          <td>看多个写操作是否同 @Transactional；Service 调用是否独立 → 风险</td>
+          <td>BUG-013 支付事务丢失</td>
+          <td>第 42-52 行 pay/paySuccess 独立调用</td>
+        </tr>
+        <tr>
+          <td><strong>⑤ 缓存一致性</strong></td>
+          <td>看写操作是否 @CacheEvict / removeCache；key 是否按 userId 等唯一分键 → 风险</td>
+          <td>BUG-005 商品缓存不一致</td>
+          <td>第 184-185 行仅在 cancel 清缓存</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>扫描顺序</strong>：Param 实体类 → Controller 方法注解 → 状态变更方法 + Entity → 写操作方法体 → 写操作后缓存代码。每扫到 1 个风险点 → 产出 1 条预测缺陷。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 18 条缺陷分布表（实测统计 · 来源 bug-list.csv）</h2>
+    <h3>4.1 严重等级分布</h3>
+    <pre class="ascii">
+   Major    6 ████████████████  33.3%
+   Minor    6 ████████████████  33.3%
+   Critical 3 ████████          16.7%
+   Trivial  3 ████████          16.7%
+   ────────────────────────────
+   合计     18 条</pre>
+    <h3>4.2 模块分布</h3>
+    <pre class="ascii">
+   订单支付   5 █████████████  27.8%   （含 2 条 Critical）
+   登录注册   4 ███████████     22.2%   （含 1 条 Critical）
+   商品       3 ████████        16.7%
+   购物车     3 ████████        16.7%
+   会员权限   3 ████████        16.7%</pre>
+    <h3>4.3 类型分布</h3>
+    <pre class="ascii">
+   功能       6 ████████████████  33.3%
+   安全       3 ████████          16.7%   （BUG-002 / 012 / 017）
+   性能       3 ████████          16.7%   （BUG-005 / 014 / 015）
+   易用性     2 █████             11.1%
+   边界       2 █████             11.1%
+   兼容性     2 █████             11.1%</pre>
+    <h3>4.4 优先级分布</h3>
+    <pre class="ascii">
+   P0 6 ████████████████  33.3%   （Critical 3 + 强 Major 3）
+   P1 6 ████████████████  33.3%   （次 Major 3 + 强 Minor 3）
+   P2 4 ██████████        22.2%   （弱 Minor 3 + 弱 Trivial 1）
+   P3 2 █████             11.1%   （Trivial 文案 2）</pre>
+  </section>
+
+  <section class="card">
+    <h2>5. 缺陷报告模板（10 字段）</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>字段</th><th>作用</th><th>bug-list.csv 示例</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>bug_id</td><td>唯一标识</td><td>BUG-001</td></tr>
+        <tr><td>2</td><td>title</td><td>一句话标题</td><td>"注册接口对 mobile/userName/userMail 缺失格式校验"</td></tr>
+        <tr><td>3</td><td>severity</td><td>严重等级</td><td>Major / Critical / Minor / Trivial</td></tr>
+        <tr><td>4</td><td>priority</td><td>修复优先级</td><td>P0 / P1 / P2 / P3</td></tr>
+        <tr><td>5</td><td>module</td><td>所属模块</td><td>登录注册 / 商品 / 购物车 / 订单支付 / 会员权限</td></tr>
+        <tr><td>6</td><td>type</td><td>缺陷类型</td><td>功能 / 性能 / 安全 / 边界 / 易用性 / 兼容性</td></tr>
+        <tr><td>7</td><td>precondition</td><td>复现前置</td><td>"test001 已注册密码 123456；不携带任何 token"</td></tr>
+        <tr><td>8</td><td>steps_to_reproduce</td><td>复现步骤</td><td>"PUT /user/updatePwd body {nickName:'test001', passWord:RSA('hack999')}"</td></tr>
+        <tr><td>9</td><td>expected</td><td>预期结果</td><td>"应被 Sa-Token 拦截器拦截返回 401 UNAUTHORIZED"</td></tr>
+        <tr><td>10</td><td>actual</td><td>实际结果</td><td>"源码 78-100 行既无 @PreAuthorize..."</td></tr>
+        <tr><td>+</td><td>suggestion</td><td>修复建议</td><td>"加 @SaCheckLogin / SecurityUtils.getUser() 校验"</td></tr>
+        <tr><td>+</td><td>related_testcase</td><td>关联用例</td><td>REG-007 / UPD-005 / CART-020 ...</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>5 阶段流转</strong>：发现（静态分析/用例执行）→ 登记（10 字段模板）→ 复现（步骤可执行化）→ 修复（开发改代码，本课不直接改）→ 回归（原用例 + 关联用例全跑绿勾）。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 修复建议常用注解速查</h2>
+    <table>
+      <thead>
+        <tr><th>注解 / API</th><th>所属框架</th><th>作用</th><th>典型用法</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>@NotBlank</code></td>
+          <td>jakarta.validation</td>
+          <td>字符串非 null 且 trim 后非空</td>
+          <td><code>@NotBlank(message="手机号不能为空")</code></td>
+        </tr>
+        <tr>
+          <td><code>@Pattern</code></td>
+          <td>jakarta.validation</td>
+          <td>正则校验字符串格式</td>
+          <td><code>@Pattern(regexp="^1[3-9]\d{9}$")</code></td>
+        </tr>
+        <tr>
+          <td><code>@Size / @Min / @Max</code></td>
+          <td>jakarta.validation</td>
+          <td>长度 / 数值上下界</td>
+          <td><code>@Size(max=64) @Min(-999) @Max(999)</code></td>
+        </tr>
+        <tr>
+          <td><code>@Email</code></td>
+          <td>jakarta.validation</td>
+          <td>邮箱格式校验</td>
+          <td><code>@Email(message="邮箱格式错误")</code></td>
+        </tr>
+        <tr>
+          <td><code>@SaCheckLogin / @SaCheckRole</code></td>
+          <td>Sa-Token</td>
+          <td>方法级鉴权</td>
+          <td><code>@SaCheckLogin</code>（已登录）/ <code>@SaCheckRole("admin")</code></td>
+        </tr>
+        <tr>
+          <td><code>@PreAuthorize</code></td>
+          <td>Spring Security</td>
+          <td>方法级鉴权（SpEL 表达式）</td>
+          <td><code>@PreAuthorize("hasRole('ADMIN')")</code></td>
+        </tr>
+        <tr>
+          <td><code>SecurityUtils.getUser()</code></td>
+          <td>mall4j 自封装</td>
+          <td>取当前登录用户上下文</td>
+          <td>方法首行强校验 userId</td>
+        </tr>
+        <tr>
+          <td><code>@Transactional</code></td>
+          <td>Spring</td>
+          <td>声明事务边界</td>
+          <td><code>@Transactional(rollbackFor = Exception.class)</code></td>
+        </tr>
+        <tr>
+          <td><code>@Version</code></td>
+          <td>MyBatis-Plus</td>
+          <td>乐观锁版本号字段</td>
+          <td>实体字段加 <code>@Version Long version</code>；updateById 自动带 where version=?</td>
+        </tr>
+        <tr>
+          <td><code>@CacheEvict / @Cacheable</code></td>
+          <td>Spring Cache</td>
+          <td>缓存清除 / 读取</td>
+          <td><code>@CacheEvict(value="prod:", key="#prodId")</code></td>
+        </tr>
+        <tr>
+          <td><code>@TransactionalEventListener</code></td>
+          <td>Spring</td>
+          <td>事务提交后异步事件</td>
+          <td><code>@TransactionalEventListener(phase=AFTER_COMMIT)</code> 解决"先 DB 后缓存"</td>
+        </tr>
+        <tr>
+          <td><code>RedisLock.tryLock</code></td>
+          <td>Redisson</td>
+          <td>分布式锁防并发</td>
+          <td><code>lockKey = "shopcart:sku:" + skuId</code>，5 秒 TTL</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+
+<footer>
+  <p class="hint">来源：<code>test-cases/M1-D3-001/bug-list.csv</code> + <code>test-cases/M1-D3-001/bug-list.md</code> + <code>AGENTS.md</code> 不变量 1 + <code>lessons/0007-bug-library-18-predicted.html</code></p>
+</footer>
+
+</body>
+</html>

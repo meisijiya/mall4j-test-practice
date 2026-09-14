@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>五种测试设计方法速查卡 · 第 4 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<header>
+  <h1>五种测试设计方法速查卡</h1>
+  <p class="meta">第 4 课 · A4 打印友好 · 测试设计方法论专用</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 五种方法 × mall4j 案例速查表</h2>
+    <p>来源：<code>2026AI+软件测试第一篇课件/func-day01~day03</code> + <code>ISTQB CTFL Syllabus v4.0</code> 测试设计技术章节。</p>
+    <table>
+      <thead>
+        <tr><th>方法</th><th>输入</th><th>适用场景</th><th>mall4j 案例</th><th>示例</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>等价类划分</strong></td>
+          <td>字段取值范围</td>
+          <td>输入字段取值多、枚举型字段</td>
+          <td>登录用户名长度 4-20</td>
+          <td>"user01" 有效 / "us" 无效</td>
+        </tr>
+        <tr>
+          <td><strong>边界值分析</strong></td>
+          <td>数值边界 / 阈值</td>
+          <td>数值范围、长度、时间阈值</td>
+          <td>订单超时 30 分钟</td>
+          <td>30:00 触发；29:59 / 30:01 不触发</td>
+        </tr>
+        <tr>
+          <td><strong>场景法</strong></td>
+          <td>业务流程</td>
+          <td>跨模块联动、用户旅程</td>
+          <td>加购 → 支付 → 发货</td>
+          <td>基本流 1 条 + 5 备选流</td>
+        </tr>
+        <tr>
+          <td><strong>状态迁移</strong></td>
+          <td>有限状态机</td>
+          <td>状态流转、回调幂等</td>
+          <td>订单 6 状态 (1→2→3→4→5)</td>
+          <td>9 迁移 × 3 = 27 条用例</td>
+        </tr>
+        <tr>
+          <td><strong>正交实验</strong></td>
+          <td>因子 × 水平组合</td>
+          <td>多条件组合爆炸、配置矩阵</td>
+          <td>角色 × 菜单 × 数据权限</td>
+          <td>L₉(3³) 把 27 降维到 9 条</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">五种方法不是并列清单，而是从"输入"到"流程"到"组合"的递进关系——一份完整的测试方案需要 2-3 种方法叠加。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 150 条用例拆解比例表（D2 + D3）</h2>
+    <p>来源：<code>feature_list.json</code> D2 + D3 行 + 本课五种方法。</p>
+    <table>
+      <thead>
+        <tr><th>模块</th><th>用例数</th><th>等价类</th><th>边界值</th><th>场景法</th><th>状态迁移</th><th>正交</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>登录 / 注册</strong></td><td>40</td><td>15</td><td>10</td><td>8</td><td>—</td><td>7</td></tr>
+        <tr><td><strong>商品 / SKU</strong></td><td>30</td><td>12</td><td>8</td><td>6</td><td>—</td><td>4</td></tr>
+        <tr><td><strong>购物车</strong></td><td>20</td><td>6</td><td>4</td><td>8</td><td>—</td><td>2</td></tr>
+        <tr><td><strong>订单 / 支付</strong></td><td>25</td><td>5</td><td>4</td><td>4</td><td>12</td><td>—</td></tr>
+        <tr><td><strong>会员 / 权限</strong></td><td>15</td><td>5</td><td>3</td><td>2</td><td>—</td><td>5</td></tr>
+        <tr><td><strong>兼容性 / 异常</strong></td><td>20</td><td>8</td><td>6</td><td>4</td><td>—</td><td>2</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>150</strong></td><td><strong>51 (34%)</strong></td><td><strong>35 (23%)</strong></td><td><strong>32 (21%)</strong></td><td><strong>12 (8%)</strong></td><td><strong>20 (13%)</strong></td></tr>
+      </tbody>
+    </table>
+    <p class="hint">等价类 34% + 边界值 23% = 57% 字段级；场景法 21% + 状态迁移 8% = 29% 流程级；正交 13% 组合级——三层覆盖互不重叠。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 用例评审 Checklist（10 条）</h2>
+    <p>来源：<code>qa-manual-istqb</code> skill 评审模板 + <code>2026最新AI测试基础一套通关/day03测试执行/</code>。</p>
+    <table>
+      <thead>
+        <tr><th>#</th><th>维度</th><th>检查点</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>覆盖完整性</td><td>每个需求点 ≥ 1 条用例；至少 1 种方法</td></tr>
+        <tr><td>2</td><td>边界就位</td><td>数值字段都有上点 / 离点 / 内点；时间阈值两侧</td></tr>
+        <tr><td>3</td><td>异常路径</td><td>基本流配 2-3 条备选流</td></tr>
+        <tr><td>4</td><td>幂等覆盖</td><td>支付 / 提交 / 确认收货等"按按钮"操作 1 条重复触发</td></tr>
+        <tr><td>5</td><td>状态机完整</td><td>每迁移有正常 / 异常前置 / 幂等 3 条</td></tr>
+        <tr><td>6</td><td>可执行性</td><td>前置 / 数据 / 期望三件套齐全</td></tr>
+        <tr><td>7</td><td>数据驱动</td><td>同类用 YAML / Excel 参数化</td></tr>
+        <tr><td>8</td><td>优先级</td><td>P0（核心交易） / P1（流程） / P2（边界）</td></tr>
+        <tr><td>9</td><td>可追溯</td><td>标注来源需求编号 / 文档章节</td></tr>
+        <tr><td>10</td><td>评审结论</td><td>通过 / 有条件通过 / 不通过 + 修改项 + 责任人</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">150 条用例 × 10 维度 = 1500 个检查点；半天跑一轮。M1 D2/D3 评审会上直接当评分表用。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 边界值三点法速记</h2>
+    <p>来源：<code>2026最新AI测试基础/day02测试设计/</code> 边界值章节。</p>
+    <pre class="ascii">
+边界条件：  ──[上点]──[离点]──[内点]──[离点]──[上点]──
+              ↑        ↑        ↑        ↑        ↑
+含义：    边界值    上-1    区间内    下+1    边界值
+              │                                     │
+              └──────────── 期望 ──────────────────┘</pre>
+    <p><strong>mall4j 经典边界</strong>：</p>
+    <ul>
+      <li>订单超时：29:59 / 30:00 / 30:01（30 分钟阈值）</li>
+      <li>自动收货：14d 23:59:59 / 15d 00:00 / 15d 00:00:01</li>
+      <li>库存扣减：stocks = 0 / 1 / 2</li>
+      <li>用户名长度：3 / 4 / 20 / 21</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>5. 状态迁移用例数公式</h2>
+    <p>来源：第 2 课 9 行状态迁移表 + <code>ISTQB CTFL</code> 状态转移测试章节。</p>
+    <pre class="ascii">
+用例数 ≈ 迁移数 × 3（正常 + 异常前置 + 幂等）
+
+mall4j 订单 9 迁移    = 9 × 3 = 27 条用例
+退款子表 5 迁移        = 5 × 3 = 15 条用例
+自动任务 2 迁移        = 2 × 3 =  6 条用例
+─────────────────────────────────────
+合计                     = 48 条用例</pre>
+    <p class="hint">订单 / 支付模块共 25 条用例，但其中 12 条是状态迁移（占比近半）——这是状态机强业务模块的特征。</p>
+  </section>
+
+</main>
+
+<footer>
+  <p><strong>源</strong>：<code>feature_list.json</code> D2 / D3 行 + <code>2026AI+软件测试第一篇课件/func-day01~day03/</code> + <code>2026最新AI测试基础/day02测试设计/</code> + <code>ISTQB CTFL Syllabus v4.0</code>。</p>
+  <p><strong>范围</strong>：B2C 单商户开源版测试设计方法专用。营销 / 多商户 / SaaS / 跨境等不在本卡范围。</p>
+  <p><strong>打印建议</strong>：A4 纵向；浏览器打开 → Ctrl/Cmd+P → 关闭页眉页脚 → 边距"自定义 8mm"。每张卡可独立打印成 1 页 A4。</p>
+</footer>
+
+</body>
+</html>

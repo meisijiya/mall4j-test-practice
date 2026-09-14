@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>mall4j 业务术语速查卡 · 第 1 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<header>
+  <h1>mall4j 业务术语速查卡</h1>
+  <p class="meta">第 1 课 · A4 打印友好 · 业务理解专用</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 三端对照表</h2>
+    <p>mall4j 是 B2C 单商户电商，<strong>一套后端服务三套前端</strong>。两个后端入口各管各的契约，接口自动化必须分别建用例集。</p>
+    <table>
+      <thead>
+        <tr><th>端</th><th>后端模块</th><th>端口</th><th>调用方（前端）</th><th>技术栈</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>管理后台</td><td><code>yami-shop-admin</code></td><td>8085</td><td><code>front-end/mall4v</code></td><td>Vue3 + Vite + Element Plus + AVUE + Pinia</td></tr>
+        <tr><td>用户端（H5 / 小程序）</td><td><code>yami-shop-api</code></td><td>8086</td><td><code>front-end/mall4m</code></td><td>原生微信小程序 + H5</td></tr>
+        <tr><td>用户端（跨端）</td><td><code>yami-shop-api</code></td><td>8086</td><td><code>front-end/mall4uni</code></td><td>uni-app 跨端编译</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">Swagger UI：<code>http://localhost:8086/doc.html</code>（Knife4j）。前后端通过 <code>/sys/menu/nav</code> 动态加载菜单路由。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 七大模块速查</h2>
+    <table>
+      <thead>
+        <tr><th>#</th><th>模块</th><th>源码路径</th><th>职责</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>商品 / SKU</td><td><code>yami-shop-api/.../prod</code> + <code>yami-shop-admin/.../prod</code></td><td>分类、规格、SKU、库存、商品上下架</td></tr>
+        <tr><td>2</td><td>购物车</td><td><code>yami-shop-api/.../api/controller/ShopCartController.java</code></td><td>加车、改数、删除、按店铺聚合</td></tr>
+        <tr><td>3</td><td>订单</td><td><code>yami-shop-api/.../api/controller/OrderController.java</code> + <code>MyOrderController.java</code></td><td>确认订单 / 提交订单 / 状态机 / 取消</td></tr>
+        <tr><td>4</td><td>支付</td><td><code>yami-shop-api/.../api/controller/PayController.java</code> + <code>PayNoticeController.java</code></td><td>支付流水、回调、退款（开源版回调逻辑为注释占位）</td></tr>
+        <tr><td>5</td><td>会员</td><td><code>yami-shop-security</code> + <code>yami-shop-bean/.../model/User</code></td><td>注册、登录、地址簿、Sa-Token 鉴权</td></tr>
+        <tr><td>6</td><td>权限</td><td><code>yami-shop-sys</code>（菜单/角色/日志）</td><td>角色-菜单-数据权限三级联动</td></tr>
+        <tr><td>7</td><td>统计</td><td><code>yami-shop-admin/.../stat</code></td><td>运营报表 SQL 聚合</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">不在开源版范围：营销、满减满折、供应链、多商户、SaaS、跨境——被问到直接说"开源版不支持"。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 核心交易链路（ASCII 流程图）</h2>
+    <p>来源 <code>doc/6-核心业务/1-核心交易链路.md</code>。</p>
+<pre class="ascii">
++----------------+   +-----------+   +-----------+   +-----------+   +--------+   +----------+
+|  商品 / SKU    |-->| 加入购物车 |-->| 确认订单   |-->| 提交订单   |-->|  支付   |-->| 后台发货 |
+| ProdController |   | ShopCart  |   | Order     |   | Order     |   | Pay    |   | Admin    |
+|  / SkuController|   | Controller |  | .confirm  |   | .submit   |   | Controller| | Order    |
++----------------+   +-----------+   +-----------+   +-----------+   +--------+   +----------+
+       |                  |                |                |               |              |
+       v                  v                v                v               v              v
+    tz_prod            tz_basket   ConfirmOrderCache   tz_order +       tz_order_     tz_order.
+  tz_sku            (uk_user_shop_sku)  (Redis)       tz_order_item    settlement   status 流转
+   .actual_stocks                                          + 库存条件更新     pay_amount   (1->2->3->4->5)
+   .stocks                                                WHERE ? &lt;= stocks
+</pre>
+    <p><strong>关键节点</strong>：</p>
+    <ul>
+      <li>确认订单结果先入 <code>ConfirmOrderCache</code>，提交时读取。</li>
+      <li>提交订单清理 <code>ConfirmOrderCache</code> + 购物车缓存。</li>
+      <li>库存扣减用 SQL 条件更新 <code>WHERE ? &lt;= stocks</code> 防超卖；失败清理商品/SKU 缓存并抛"库存不足"。</li>
+      <li>支付成功发布 <code>PaySuccessOrderEvent</code>，后续逻辑事件订阅。</li>
+    </ul>
+  </section>
+
+  <section class="card">
+    <h2>4. 五流贯通（一句话定义）</h2>
+    <blockquote>
+      <strong>资金流</strong>（支付→结算→退款原路返回）、<strong>信息流</strong>（下单→后台看单→拣货）、<strong>物流</strong>（发货→签收）、<strong>配置流</strong>（后台配置→用户端生效）、<strong>数据流</strong>（订单/支付/会员→统计报表）——五条流在同一笔订单上<strong>同时跑通</strong>，单点通过的孤立测试<strong>不写进用例库</strong>。
+    </blockquote>
+  </section>
+
+  <section class="card">
+    <h2>5. 关键术语</h2>
+
+    <h3>SKU / SPU</h3>
+    <table>
+      <thead><tr><th>概念</th><th>定义</th><th>存储表</th></tr></thead>
+      <tbody>
+        <tr><td>SPU（商品）</td><td>展示/售卖的抽象商品，含名称、主图、详情、分类、运费模板。</td><td><code>tz_prod</code></td></tr>
+        <tr><td>SKU（规格）</td><td>可购买的最小单元，含价格、库存、销售属性组合。</td><td><code>tz_sku</code></td></tr>
+        <tr><td>规格 / 规格值</td><td>如"颜色：红色 / 版本：64GB"。</td><td><code>tz_spec / tz_spec_value</code></td></tr>
+      </tbody>
+    </table>
+
+    <h3>订单状态枚举（<code>yami-shop-bean/.../enums/OrderStatus.java</code>）</h3>
+    <table>
+      <thead><tr><th>状态值</th><th>含义</th><th>触发动作</th></tr></thead>
+      <tbody>
+        <tr><td><code>1</code></td><td>待付款</td><td>提交订单后写入；超时由 <code>OrderTask</code> 定时取消</td></tr>
+        <tr><td><code>2</code></td><td>待发货</td><td>支付成功触发</td></tr>
+        <tr><td><code>3</code></td><td>待收货</td><td>商家发货触发</td></tr>
+        <tr><td><code>4</code></td><td>待评价</td><td>用户确认收货</td></tr>
+        <tr><td><code>5</code></td><td>成功</td><td>用户评价完成（或超时）</td></tr>
+        <tr><td><code>6</code></td><td>失败 / 关闭</td><td>超时未付 / 用户取消 / 退款关闭</td></tr>
+      </tbody>
+    </table>
+
+    <h3>支付渠道</h3>
+    <table>
+      <thead><tr><th>渠道</th><th>开源版现状</th><th>测试切入点</th></tr></thead>
+      <tbody>
+        <tr><td>微信支付</td><td>支付接口直接调 <code>paySuccess()</code>，无真实网关</td><td>支付流水号生成 + 状态更新幂等</td></tr>
+        <tr><td>支付宝</td><td>同上</td><td>同上</td></tr>
+        <tr><td>余额</td><td>同上</td><td>同上</td></tr>
+        <tr><td>回调（<code>PayNoticeController</code>）</td><td>当前代码为注释占位</td><td>真实接入需补签名校验 + 幂等去重</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">多订单可共用一个 <code>payNo</code>（并单支付），金额从 <code>tz_order_settlement.pay_amount</code> 汇总读取，<strong>不接受前端传入金额</strong>。</p>
+
+    <h3>库存扣减点</h3>
+    <table>
+      <thead><tr><th>位置</th><th>扣减时机</th><th>SQL 关键条件</th></tr></thead>
+      <tbody>
+        <tr><td><code>SkuMapper.xml</code></td><td>提交订单时（数据库条件更新）</td><td><code>WHERE sku_id = ? AND ? &lt;= stocks</code></td></tr>
+        <tr><td><code>ProductMapper.xml</code></td><td>同上（汇总层）</td><td><code>WHERE prod_id = ? AND ? &lt;= total_stocks</code></td></tr>
+        <tr><td>更新失败</td><td>清理商品/SKU 缓存 + 抛"库存不足"异常</td><td>——</td></tr>
+      </tbody>
+    </table>
+    <p>返还时机：订单取消 / 退款关闭。配合 Redisson 分布式锁防并发超卖。</p>
+  </section>
+
+</main>
+
+<footer>
+  <p><strong>源</strong>：<code>doc/1-项目概览/{1,2,3,4}-*.md</code> + <code>doc/6-核心业务/{1,2,3,5,6,7}-*.md</code> + <code>CONTEXT.md</code> + <code>AGENTS.md</code>。</p>
+  <p><strong>范围</strong>：B2C 单商户开源版业务理解专用。营销 / 多商户 / SaaS / 跨境等不在本卡范围。</p>
+  <p><strong>打印建议</strong>：A4 纵向；浏览器打开 → Ctrl/Cmd+P → 关闭页眉页脚 → 边距"自定义 8mm"。每张卡可独立打印成 1 页 A4。</p>
+</footer>
+
+</body>
+</html>

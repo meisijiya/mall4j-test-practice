@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 14 课 GitHub Actions CI 流水线接入（mall4j M2-D9-001）</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 14 课：GitHub Actions CI 流水线接入（mall4j M2-D9-001）</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 14 课</span>
+    <span class="tag">难度 ★★★</span>
+    <span class="tag">时长 35 分钟</span>
+    <span class="tag">实战对象 M2-D9-001 GitHub Actions api-test.yml 188 行 + services MySQL8/Redis7 + 9 steps</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">为什么测试需要 CI（本地能跑 ≠ 团队能跑）</a></li>
+      <li><a href="#sec2">GitHub Actions 最小可投骨架（workflow 三件套 + services + secrets）</a></li>
+      <li><a href="#sec3">mall4j CI 完整 workflow 解读（9 steps 全链路 mermaid）</a></li>
+      <li><a href="#sec4">6 件非显然 fix 与降级（conftest 顶层 / AES / seed / RUN_UI / allure-action / 网络）</a></li>
+      <li><a href="#sec5">3 道思考题 + 下一课（M3-D10-001 Locust）</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 为什么测试需要 CI（本地能跑 ≠ 团队能跑）</h2>
+  <p>本地 <code>pytest -m "not ui"</code> 6 PASS / 4 SKIP / 47 collected ≠ 同事在另一台机器也能跑通 ≠ PR 合并前自动验证。CI（持续集成）把"<strong>我能跑</strong>"变成"<strong>任何 PR 都自动跑</strong>"——这是测试开发岗从"<strong>个人跑通</strong>"升级到"<strong>团队基础设施</strong>"的硬分水岭。</p>
+  <p>CI 给测试工程师的 4 个核心价值（讲给非技术面试官听）：</p>
+  <ul>
+    <li><strong>PR 门禁</strong>：合并前必须绿（<code>required_status_checks</code>），防止引入回归 — — 不在线跑一遍永远不会发现"昨天接口加了鉴权 header，今天下游全 401"。</li>
+    <li><strong>定时巡检</strong>：<code>on: schedule: cron: '0 2 * * *'</code> 每天凌晨跑一次，发现"今天突然挂了"（依赖挂、数据库 schema 漂移）。</li>
+    <li><strong>可重现环境</strong>：runner 是干净的 <code>ubuntu-latest</code>（每次跑都是新 VM），本机 Windows / macOS / 依赖版本差异消失 — — 这是 CI 最值钱的特性。</li>
+    <li><strong>历史报告</strong>：allure history 30 天趋势可看（哪条用例昨天 PASS 今天 FAIL / 失败频率 / flaky 趋势）。</li>
+  </ul>
+  <div class="mermaid">
+    sequenceDiagram
+      participant Dev as 开发者
+      participant GH as GitHub
+      participant Act as Actions Runner (ubuntu-latest)
+      participant MyS as MySQL 8.0.33
+      participant Red as Redis 7.2-alpine
+      Dev->>GH: git push origin main
+      GH->>Act: 触发 api-test.yml (push trigger)
+      Act->>MyS: services 启 mysql:8.0.33 + health-cmd
+      Act->>Red: services 启 redis:7.2-alpine + health-cmd
+      Act->>Act: mvn -B -pl yami-shop-api -am package
+      Act->>Act: java -jar & 启服务 + curl 探活 60s
+      Act->>Act: pip install cryptography pycryptodome
+      Act->>Act: pytest -m "not ui" --alluredir=...
+      Act->>GH: allure-report artifact (30 天)
+      Act->>GH: allure-action 部署 gh-pages
+      GH->>Dev: PR 评论附 allure 链接
+  </div>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    L13 = "<strong>POM 完整化 + UI 路径 2 captcha mock + 85 用例</strong>"（39 文件 / 85 用例 / 7 Page 类 / allure severity 5）—— 决定了测试工程师"<strong>能不能设计完整 UI + 接口框架</strong>"。L14 = "<strong>CI 流水线接入</strong>"（1 个 workflow 文件 + services + 9 steps）—— 决定了测试工程师"<strong>能不能让框架自动跑起来</strong>"。前者是工具，后者是工具的工具。
+  </div>
+
+  <h2 id="sec2">2. GitHub Actions 最小可投骨架</h2>
+  <p>GitHub Actions workflow 文件 = <strong>.github/workflows/&lt;name&gt;.yml</strong>（路径固定，不能放别处），YAML 语法。下面给最小可投骨架 + 两个必备 block。</p>
+
+  <h3>2.1 workflow 三件套（name / on / jobs）</h3>
+  <pre><code class="language-yaml">name: API Test Pipeline
+on:
+  push:
+    branches: [main]      # push 到 main 才触发
+  pull_request:           # PR 打开也触发
+    branches: [main]
+  workflow_dispatch:       # 手动按钮触发（调试用）
+
+jobs:
+  test:
+    runs-on: ubuntu-latest  # runner 系统
+    steps:
+      - uses: actions/checkout@v4          # 1. 拉代码
+      - uses: actions/setup-java@v4        # 2. 装 JDK 17
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven                     # cache 依赖避免每次下载
+      - uses: actions/setup-python@v5      # 3. 装 Python 3.11
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: test-cases/api-auto/requirements.txt
+      - run: echo "hello ci"               # 4. 测试命令
+</code></pre>
+  <p>三件套：<code>name</code>（workflow 显示名）+ <code>on</code>（什么时候触发）+ <code>jobs.&lt;id&gt;</code>（要跑什么任务）。每个 <code>job</code> 必须在 <code>runs-on</code> 上声明 runner 系统（<code>ubuntu-latest</code> / <code>windows-latest</code> / <code>macos-latest</code>）。</p>
+
+  <h3>2.2 services block 启 MySQL / Redis（核心）</h3>
+  <pre><code class="language-yaml">services:
+  mysql:
+    image: mysql:8.0.33                       # 镜像版本
+    env:
+      MYSQL_ROOT_PASSWORD: ${{ secrets.DB_PWD }}   # 密码用 secret 注入
+      MYSQL_DATABASE: yami_shop
+    ports:
+      - 3306:3306                             # 端口映射
+    options: &gt;
+      --health-cmd="mysqladmin ping"
+      --health-interval=10s
+      --health-timeout=5s
+      --health-retries=10
+  redis:
+    image: redis:7.2-alpine
+    ports:
+      - 6379:6379
+    options: &gt;
+      --health-cmd="redis-cli ping"
+      --health-interval=10s
+      --health-retries=10
+</code></pre>
+  <p><strong>关键点</strong>：<code>options</code> 里 <code>--health-cmd</code> + <code>--health-interval</code> 是确认"<strong>服务真 ready</strong>"的机制（不是启了就用，否则连不上）。runner 会等 health-cmd 成功才进下一步。L14 §4.6 网络坑会再讲。</p>
+
+  <h3>2.3 secrets vs env 区别（面试常考）</h3>
+  <ul>
+    <li><code>secrets.*</code>：加密存储，<strong>Settings → Secrets and variables → Actions</strong> 配置，运行时才解密（<strong>日志里自动遮蔽</strong>为 <code>***</code>），适合密码 / token / API key。</li>
+    <li><code>env.*</code>：明文写在 workflow（<strong>任何人能看</strong>），适合非敏感配置（数据库名 / 日志级别 / 端口）。</li>
+    <li>yml 顶部 <code>env:</code> 是全局变量，job 内 <code>env:</code> 是 job 局部变量，step 内 <code>env:</code> 是 step 局部变量。</li>
+  </ul>
+
+  <h2 id="sec3">3. mall4j CI 完整 workflow 解读</h2>
+  <p>M2-D9-001 落地的 <code>.github/workflows/api-test.yml</code> 共 188 行，拆 9 个 step 全链路：</p>
+  <ol>
+    <li><strong>checkout（actions/checkout@v4）</strong> — 拉代码（默认 shallow clone，<code>fetch-depth: 0</code> 才看完整历史）。</li>
+    <li><strong>setup-java17（actions/setup-java@v4）</strong> — temurin JDK17 + <code>cache: maven</code>，避免每次重下依赖（首次跑 3 min，缓存命中后 30 s）。</li>
+    <li><strong>setup-python3.11（actions/setup-python@v5）</strong> — Python 3.11 + <code>cache: pip</code> + <code>cache-dependency-path: requirements.txt</code>，粒度到文件 hash。</li>
+    <li><strong>cache playwright（actions/cache@v4）</strong> — 仅 <code>RUN_UI=1</code> 时命中（默认 <code>RUN_UI=0</code> 跳过，150 MB Chromium 下载浪费 runner）。</li>
+    <li><strong>灌 DDL + seed（run）</strong> — <code>mysql -h 127.0.0.1 -uroot -p$DB_PWD yami_shop &lt; .github/workflows/yami_shop.sql</code> + <code>seed-data.sql</code>（cart/order 硬编码 ID 用 seed，不依赖 fixture runner）。</li>
+    <li><strong>mvn 编译（run）</strong> — <code>mvn -B -pl yami-shop-api -am package -DskipTests</code>（-B 批模式 + -pl/-am 多模块聚合）。</li>
+    <li><strong>java -jar & 启服务（run）</strong> — <code>nohup java -jar target/*.jar &gt; app.log 2&gt;&amp;1 &amp;</code> + <code>curl --retry 60 --retry-delay 1 --retry-connrefused http://localhost:8086/</code> 探活。</li>
+    <li><strong>pip install（run）</strong> — <code>pip install -r requirements.txt</code>（<code>cryptography</code> + <code>pycryptodome</code> 是 L12 §4.2 修过的 AES-ECB-PKCS7 依赖，缺包登录永远 A00005）。</li>
+    <li><strong>pytest + allure + upload（run + actions/upload-artifact@v4 + awesomecode/allure-action@v1）</strong> — <code>pytest -m "not ui" --alluredir=./allure-results</code> + <code>allure generate</code> + <code>upload-artifact</code>（30 天保存）+ <code>allure-action</code> 部署 gh-pages。</li>
+  </ol>
+  <div class="mermaid">
+    flowchart TD
+      A[git push] --&gt; B[services: MySQL+Redis ready]
+      B --&gt; C[mvn 编译 3min]
+      C --&gt; D[java -jar 启服务]
+      D --&gt; E[curl 探活 60s]
+      E --&gt; F[灌 DDL + seed SQL]
+      F --&gt; G[pip install 30s]
+      G --&gt; H[pytest -m 'not ui' 2min]
+      H --&gt; I[allure generate 5s]
+      I --&gt; J[upload-artifact 30天]
+      I --&gt; K[allure-action gh-pages]
+      J --&gt; L[PR 评论附下载链接]
+      K --&gt; L
+      style B fill:#fff3cd
+      style H fill:#d4edda
+      style L fill:#cce5ff
+  </div>
+  <p>9 个 step 总耗时参考（ubuntu-latest，依赖已缓存）：<strong>灌 DDL 10 s + mvn 编译 3 min + 启服务 30 s + pip 30 s + pytest 2 min + allure 5 s = 约 6 分钟</strong>。首次跑（无缓存）会多 2-3 分钟（maven 依赖下载）。</p>
+
+  <h2 id="sec4">4. 6 件非显然 fix 与降级</h2>
+  <p>M2-D9-001 落地过程中踩到 6 个非显然 fix，全部沉淀在 <code>doc/3-API接口/M2-D9-001-impl-notes.md</code>：</p>
+  <ol>
+    <li><strong>pytest skipif 顶层 load env</strong> — <code>conftest.py</code> <strong>模块顶层</strong>调 <code>_load_env()</code> 注入 <code>os.environ</code>；CI 端用 <code>env.PROD_ID</code> 灌 .env，pytest <strong>collect 阶段</strong>（<code>pytest.mark.skipif(os.getenv("PROD_ID"))</code> 求值时）就不 skip。L11 §4.3 + L12 §4.3 都修过这个坑。</li>
+    <li><strong>AES-ECB cryptography 双装</strong> — <code>requirements.txt</code> 显式装 <code>cryptography</code> + <code>pycryptodome</code>（缺包 <code>common/mall4j_aes.py</code> 报 ImportError → 登录永远 A00005）。</li>
+    <li><strong>cart/order 硬编码 ID 用 seed-data.sql</strong> — 不依赖 fixture runner 启动时插入；seed SQL 走 <code>.github/workflows/seed-data.sql</code>（<code>INSERT INTO tz_order (order_id, ...) VALUES (...)</code>），CI 灌完即可用。</li>
+    <li><strong>chromium 默认 RUN_UI=0 skip</strong> — 150 MB 下载浪费 runner 时间（PR 跑 6 min vs 4 min 差距），<code>workflow_dispatch</code> 手动开 <code>RUN_UI=1</code> 才装 <code>playwright install chromium</code>。</li>
+    <li><strong>allure-commandline 不在 pip</strong> — allure 是 Java 写的 CLI 工具，pip 装的是 <code>allure-pytest</code> 适配器；CI 用 <code>awesomecode/allure-action@v1</code> 一键 <code>generate</code> + <code>deploy gh-pages</code>，省 1 GB JDK 依赖下载。</li>
+    <li><strong>CI 网络不切镜像</strong> — <code>ubuntu-latest</code> runner 国际链路本就快（GitHub 自家机房），切 <code>tsinghua</code> / <code>aliyun</code> 镜像反而慢；<strong>fallback 是本机原生启动</strong>（本机 docker mysql/redis + java -jar 跑 fat-jar，AGPLv3 边界 §6 已有路径）。</li>
+  </ol>
+
+  <h3>4.1 降级路径 3 条（CI 失败时立即套）</h3>
+  <pre><code class="language-bash"># 降级 1：跳过 allure gh-pages 部署（allure-action 失败时）
+# allure-action 失败 = 不能部署报告，但 raw allure-results 仍可下载
+- name: Upload raw allure-results
+  if: always()  # 失败也上传，方便本地调试
+  uses: actions/upload-artifact@v4
+  with:
+    name: allure-results
+    path: test-cases/api-auto/allure-results
+    retention-days: 30
+
+# 降级 2：跳过 UI（chromium 下载失败 / 网络不通）
+- name: pip install playwright
+  if: env.RUN_UI == '1'  # 默认 0 直接跳过整个 step
+- name: pytest UI
+  if: env.RUN_UI == '1'
+  run: pytest -m ui
+
+# 降级 3：跳过 mvn 编译（已经 prebuild 时）
+# 本地 mvn package 后把 fat-jar 上传成 artifact，CI 端 download
+- uses: actions/download-artifact@v4
+  with:
+    name: yami-shop-api-jar
+    path: yami-shop-api/target/
+- name: skip mvn compile
+  run: echo "using prebuilt jar"
+</code></pre>
+  <div class="interview">
+    <div class="who">CI 设计哲学</div>
+    CI 不是"<strong>必须跑通</strong>"，是"<strong>跑不通也能拿到证据</strong>"。三件套：① raw <code>allure-results</code>（<code>if: always()</code> 上传，失败也能下载）；② <code>services options --health-cmd</code>（确认依赖真 ready，不是启了就连得上）；③ <code>workflow_dispatch</code> 手动 trigger（PR 失败时手动重跑，绕过 cron 限制）。
+  </div>
+
+  <h2 id="sec5">5. 思考题 + 下一课（M3-D10-001 Locust）</h2>
+  <div class="quiz">
+    <p><strong>Q1</strong>：GitHub Actions runner 默认时区是 UTC 还是本地？答：<strong>UTC</strong>（<code>date</code> 命令 / allure report 时间戳全是 UTC，转换成北京时间 +8）。坑：<code>seed-data.sql</code> 里 <code>created_at = NOW()</code> 灌进去是 UTC，CI 调试时用 <code>SELECT * FROM tz_order</code> 看到时间差 8 小时别慌。</p>
+    <p><strong>Q2</strong>：services block 启的 <code>mysql:8.0.33</code> 用什么机制确认 ready？答：<code>--health-cmd="mysqladmin ping"</code> + <code>--health-interval=10s</code> + <code>--health-retries=10</code>（10s 探一次，连探 10 次成功才算 ready，最长等 100 s）。坑：mysql 8 启动慢（要初始化 data dir），不加 health-cmd 会"启了但连不上"导致灌 DDL 失败。</p>
+    <p><strong>Q3</strong>：<code>awesomecode/allure-action@v1</code> 部署 gh-pages 失败时，最简单的 fallback？答：改用 <code>actions/upload-artifact@v4</code> 上传 <code>allure-report/</code> 目录（30 天保存），PR 评论附 Actions → Artifacts 下载链接，本地 <code>allure open</code> 就能看报告。代价：不能在线浏览趋势，但失败时这是最快恢复路径。</p>
+  </div>
+
+  <h3>5.1 简历可写数字（谨慎）</h3>
+  <ul>
+    <li>"设计 GitHub Actions CI 流水线，覆盖 <code>push</code> / <code>pull_request</code> / <code>workflow_dispatch</code> 三类 trigger"。</li>
+    <li>"<code>services</code> block 启 MySQL 8.0.33 + Redis 7.2-alpine，<code>--health-cmd</code> 健康检查，<code>mvn -B -pl yami-shop-api -am package</code> 多模块编译 + pytest -m 'not ui' + allure 全链路，月度 runner ≤ 90 分钟"。</li>
+    <li>"落 6 件 CI 关键 fix（conftest 顶层 load env / AES 双装 cryptography / seed-data.sql / RUN_UI=0 默认 skip / allure-action 不依赖 allure-commandline / CI 不切镜像）"。</li>
+  </ul>
+
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "基于 GitHub Actions 设计 mall4j API + UI 自动化 CI 流水线（api-test.yml 188 行 / 9 steps），services block 启 MySQL 8.0.33 + Redis 7.2-alpine + <code>--health-cmd</code> 健康检查，<code>mvn -B -pl yami-shop-api -am package</code> 多模块编译 + <code>java -jar</code> 启服务 + curl 探活 + pytest -m 'not ui' + allure-action 部署 gh-pages 全链路，覆盖 push / PR / workflow_dispatch 三类 trigger，6 分钟内跑完，月度 runner ≤ 90 分钟"——这句直接写进 M2 项目经验。
+  </div>
+
+  <p><strong>下一课预告</strong>：M3-D10-001 <strong>Locust 登录压测</strong>（depends_on M2-D9-001 已就绪 —— CI 跑通后接 Locust 做压测，验证 50 并发下登录链路 TPS / P95 / 错误率）。M3-D10-001 完工后会同步落 <code>test-cases/performance/locust_login.py</code> + lesson 0015。</p>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="foot-row">
+    <div class="label">上一课</div>
+    <div><a href="../lessons/0013-pom-path2-90-cases.html">第 13 课 POM 完整化 + UI 路径 2 captcha mock + 90 用例（M2-D8-001）</a></div>
+  </div>
+  <div class="foot-row">
+    <div class="label">下一课</div>
+    <div><a href="../lessons/0015-locust-performance-testing.html">第 15 课 Locust 登录压测（M3-D10-001 待开工）</a></div>
+  </div>
+  <p class="copyright">mall4j M2-D9-001 · GitHub Actions api-test.yml 188 行 · AGPLv3 边界 100% 守</p>
+</footer>
+
+</body>
+</html>

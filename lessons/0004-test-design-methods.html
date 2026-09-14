@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 4 课 测试设计方法论</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 4 课：测试设计方法论——五种方法 × 150 条用例拆解</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 4 课</span>
+    <span class="tag">难度 ★★★☆☆</span>
+    <span class="tag">时长 35 分钟</span>
+    <span class="tag">实战对象 150 条用例拆解</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（第 3 课关键点）</a></li>
+      <li><a href="#sec2">五种测试设计方法速查</a></li>
+      <li><a href="#sec3">等价类划分法（输入域切分）</a></li>
+      <li><a href="#sec4">边界值分析法（off-by-one）</a></li>
+      <li><a href="#sec5">场景法（基本流 + 备选流）</a></li>
+      <li><a href="#sec6">状态迁移法（前置 → 触发 → 迁移）</a></li>
+      <li><a href="#sec7">正交实验法（因子 × 水平组合降维）</a></li>
+      <li><a href="#sec8">150 条用例拆解比例表（D2 + D3）</a></li>
+      <li><a href="#sec9">用例评审 Checklist</a></li>
+      <li><a href="#sec10">课堂小测（3 道单选）</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（第 3 课关键点）</h2>
+  <p>第 3 课讲了三件事：</p>
+  <ol>
+    <li>模块边界：<code>yami-shop-api</code>（用户端 :8086）服务小程序/H5/uni-app，<code>yami-shop-admin</code>（管理端 :8085）服务 mall4v，前后端通过 <code>/sys/menu/nav</code> 动态加载菜单路由。</li>
+    <li>可测点：每个模块至少挑出 3 个可测点，对应到等价类 / 边界值 / 场景法 / 状态迁移中的至少一种方法。</li>
+    <li>第一份接口用例：登录 → 加购 → 下单 → 支付，用 Postman / Knife4j 跑通最小闭环。</li>
+  </ol>
+  <div class="interview">
+    <div class="who">本课承诺</div>
+    把"五种测试设计方法"打透成"输入 / 适用场景 / mall4j 案例 / 示例"四件套；再把 <code>feature_list.json</code> 里 D2+D3 的 150 条用例（90 + 60）按方法落到一张拆解比例表上——第 5 课直接进入测试开发全流程。
+  </div>
+
+  <h2 id="sec2">2. 五种测试设计方法速查</h2>
+  <p>来源：<code>D:/26测试/2026AI+软件测试第一篇课件/func-day01~day03</code> + <code>ISTQB CTFL Syllabus v4.0</code> 测试设计技术章节。术语统一：</p>
+  <table>
+    <thead>
+      <tr><th>#</th><th>方法</th><th>核心思想</th><th>适用场景</th><th>mall4j 落点</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>1</td><td><strong>等价类划分</strong></td><td>把输入域切成若干等价类，从每类挑 1 个代表</td><td>输入字段取值多、枚举型字段</td><td>登录账号、支付渠道、订单状态枚举</td></tr>
+      <tr><td>2</td><td><strong>边界值分析</strong></td><td>在等价类边界取上点 / 离点 / 内点</td><td>数值范围、长度、阈值</td><td>库存阈值、订单超时 30 分钟、自动收货 15 天</td></tr>
+      <tr><td>3</td><td><strong>场景法</strong></td><td>基本流 + 备选流，模拟用户从进入到完成</td><td>业务流程、跨模块联动</td><td>加购 → 确认订单 → 提交订单 → 支付 → 发货</td></tr>
+      <tr><td>4</td><td><strong>状态迁移</strong></td><td>画状态机，按迁移路径生成用例</td><td>有限状态机、回调幂等</td><td>订单 6 状态（UNPAY/PADYED/CONSIGNMENT/CONFIRM/SUCCESS/CLOSE）</td></tr>
+      <tr><td>5</td><td><strong>正交实验</strong></td><td>因子 × 水平的组合降维，用 Lₙ 表挑选代表</td><td>多条件组合爆炸、配置矩阵</td><td>角色 × 菜单 × 数据权限的组合</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">面试官的一句话</div>
+    "等价类切输入、边界值取上下、场景法连流、状态迁移画机、正交实验降维"——五种方法不是并列清单，而是从"输入"到"流程"到"组合"的递进关系。
+  </div>
+
+  <h2 id="sec3">3. 等价类划分法（输入域切分）</h2>
+  <p>来源：<code>2026AI+软件测试第一篇课件/func-day01金融web项目/</code> 等价类章节。</p>
+  <p><strong>三步法</strong>：① 划分等价类（有效 / 无效）② 为每个等价类编号 ③ 从每类至少挑 1 个代表用例。</p>
+  <p><strong>mall4j 案例——登录用户名</strong>（来源：<code>yami-shop-security</code> 登录拦截器）：</p>
+  <table>
+    <thead><tr><th>输入条件</th><th>有效等价类</th><th>无效等价类</th></tr></thead>
+    <tbody>
+      <tr><td>用户名长度</td><td>4 ≤ len ≤ 20（字母数字下划线）</td><td>len &lt; 4；len &gt; 20；含特殊字符；全空格；含中文</td></tr>
+      <tr><td>用户名存在</td><td>DB 中已存在</td><td>DB 中不存在</td></tr>
+      <tr><td>用户名是否启用</td><td>status = 1</td><td>status = 0（禁用）</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">示例用例</div>
+    输入 <code>"user01"</code>（有效类）→ 期望进入密码校验；输入 <code>"us"</code>（无效类-长度过短）→ 期望返回"用户名长度 4-20"。
+  </div>
+  <p><strong>常见坑</strong>：等价类划分时把"数字字符"和"字母字符"分得太细，导致用例数膨胀。原则是"按业务规则切，不是按字符切"——同一个业务约束下的所有取值归为 1 类。</p>
+
+  <h2 id="sec4">4. 边界值分析法（off-by-one）</h2>
+  <p>来源：<code>2026最新AI测试基础一套通关/1、AI测试基础/day02测试设计/</code> 边界值章节。</p>
+  <p><strong>三点法</strong>：上点（边界值本身）、离点（距上点 1 个单位的值）、内点（区间内任意值）。每个边界条件至少取 3 个点。</p>
+  <p><strong>mall4j 案例——订单自动取消 30 分钟阈值</strong>（来源：<code>yami-shop-admin/.../task/OrderTask.java</code>）：</p>
+  <table>
+    <thead><tr><th>边界条件</th><th>上点</th><th>离点（上）</th><td>离点（下）</td><th>期望</th></tr></thead>
+    <tbody>
+      <tr><td>update_time = now − 30 分钟</td><td>30:00</td><td>29:59</td><td>30:01</td><td>30:00 触发取消；29:59 不触发；30:01 已触发</td></tr>
+      <tr><td>自动收货 15 天阈值</td><td>15d 00:00</td><td>14d 23:59:59</td><td>15d 00:00:01</td><td>15 天整触发；之前不触发</td></tr>
+      <tr><td>库存扣减阈值</td><td>stocks = 1</td><td>stocks = 0</td><td>stocks = 2</td><td>1 扣成功；0 抛"库存不足"；2 扣后剩 1</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">测开金句</div>
+    边界值要测"刚刚到达"和"刚刚没到"两侧——这是程序员写 <code>&lt;</code> 与 <code>&lt;=</code> 时最容易出错的地方。
+  </div>
+  <p><strong>注意</strong>：开源版的 30 分钟 / 15 天阈值在 <code>OrderTask.java</code> 里硬编码，没暴露到配置文件——二开抽阈值时，边界用例要重跑一遍。</p>
+
+  <h2 id="sec5">5. 场景法（基本流 + 备选流）</h2>
+  <p>来源：<code>2026AI+软件测试第一篇课件/func-day02金融Web项目/</code> 场景法章节。</p>
+  <p><strong>画法</strong>：从用户进入系统到离开画一条基本流（happy path），每个分支画备选流（error path / alternate path）。用 Mermaid / Visio 画流程图，再把每条路径翻译成用例。</p>
+  <p><strong>mall4j 案例——加购 → 支付成功</strong>：</p>
+  <pre><code>基本流：登录 → 加购(库存足) → 确认订单 → 提交订单 → 支付 → 发货 → 确认收货 → 评价
+备选流 A：加购时库存不足 → 提示"库存不足"并阻止提交
+备选流 B：提交时未选地址 → 提示"请先选择收货地址"
+备选流 C：支付失败（余额不足 / 网关超时） → 订单保持 UNPAY，等待重试
+备选流 D：30 分钟未支付 → OrderTask 自动取消，还原库存
+备选流 E：支付成功 → 商家 24h 未发货 → 触发用户申请退款</code></pre>
+  <p><strong>用例计数规则</strong>：基本流 1 条 + 每条备选流 1 条 + 备选流之间组合（按需）。简单场景 5-8 条用例，复杂主链路 12-20 条。</p>
+  <div class="interview">
+    <div class="who">面试答法</div>
+    场景法不是"列举所有 if 分支"，而是"站在用户视角画完整旅程"——主链路 1 条 + 5 个典型备选流就够覆盖 80% 业务路径。
+  </div>
+
+  <h2 id="sec6">6. 状态迁移法（前置 → 触发 → 迁移）</h2>
+  <p>来源：第 2 课的 9 行状态迁移表 + <code>ISTQB CTFL</code> 状态转移测试章节。</p>
+  <p><strong>画法</strong>：① 列出所有状态 ② 列出每个状态能去往的状态 ③ 标注触发事件 / 触发方 / 副作用。每个迁移生成至少 3 条用例：正常路径、异常前置（非法前置状态）、幂等路径（重复触发）。</p>
+  <p><strong>mall4j 案例——订单状态机核心 4 迁移</strong>（来源：<code>OrderStatus.java</code>）：</p>
+  <table>
+    <thead><tr><th>迁移</th><th>正常路径</th><th>异常前置</th><th>幂等路径</th></tr></thead>
+    <tbody>
+      <tr><td>1 → 2（UNPAY → PADYED）</td><td>正常支付成功</td><td>已发货订单再次调支付</td><td>同一笔重复回调</td></tr>
+      <tr><td>2 → 3（PADYED → CONSIGNMENT）</td><td>商家发货</td><td>待付款订单发货</td><td>同一订单重复发货</td></tr>
+      <tr><td>3 → 4（CONSIGNMENT → CONFIRM）</td><td>用户确认收货</td><td>待发货订单确认收货</td><td>重复点击确认收货</td></tr>
+      <tr><td>3 → 5（CONSIGNMENT → SUCCESS）</td><td>15 天自动收货</td><td>14 天 23 时触发</td><td>任务并发重复执行</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">测开用法</div>
+    状态迁移用例数 ≈ 迁移数 × 3（正常 / 异常 / 幂等）。订单 9 个迁移 = 27 条用例；退款子表再单独走 5-8 条。
+  </div>
+
+  <h2 id="sec7">7. 正交实验法（因子 × 水平组合降维）</h2>
+  <p>来源：<code>2026最新AI测试基础一套通关/1、AI测试基础/day02测试设计/</code> 正交实验章节。</p>
+  <p><strong>核心思想</strong>：当组合数为 因子数⁽¹⁾^水平数 时（全组合爆炸），用正交表 <code>Lₙ(m^k)</code> 挑选 n 行代表，使每对因子的每个水平组合都恰好出现 1 次。</p>
+  <p><strong>mall4j 案例——角色 × 菜单 × 数据权限组合</strong>（来源：<code>yami-shop-sys</code> 权限模块）：</p>
+  <table>
+    <thead><tr><th>因子 / 水平</th><th>水平 1</th><th>水平 2</th><th>水平 3</th></tr></thead>
+    <tbody>
+      <tr><td><strong>角色</strong></td><td>超级管理员</td><td>运营</td><td>客服</td></tr>
+      <tr><td><strong>菜单</strong></td><td>订单管理</td><td>商品管理</td><td>会员管理</td></tr>
+      <tr><td><strong>数据权限</strong></td><td>全部</td><td>本店</td><td>本人</td></tr>
+    </tbody>
+  </table>
+  <p>全组合 = 3 × 3 × 3 = 27 条；用 <code>L₉(3³)</code> 正交表只需 9 条用例：</p>
+  <pre><code>L9(3^3) 正交表
+#  角色        菜单         数据权限
+1  超管        订单         全部
+2  超管        商品         本店
+3  超管        会员         本人
+4  运营        订单         本店
+5  运营        商品         本人
+6  运营        会员         全部
+7  客服        订单         本人
+8  客服        商品         全部
+9  客服        会员         本店</code></pre>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "用 L₉(3³) 正交表把 27 组合降维到 9 条用例，覆盖 3 角色 × 3 菜单 × 3 数据权限的全部交互"——这句直接写进 M1 项目经验。
+  </div>
+  <p><strong>工具</strong>：<code>allpairs</code>（Windows 命令行）自动生成正交表；mall4j 权限模块 4 因子 × 3 水平 = <code>L₉(3⁴)</code>，写到 D7 pytest 用例。</p>
+
+  <h2 id="sec8">8. 150 条用例拆解比例表（D2 + D3）</h2>
+  <p>来源：<code>feature_list.json</code> D2 + D3 行 + 第 2 课订单状态机表 + 本课五种方法。</p>
+  <p><strong>拆解规则</strong>：每个模块按"业务复杂度 + 接口字段数"分配用例数，每条用例至少落一种方法。</p>
+  <table>
+    <thead>
+      <tr><th>模块</th><th>用例数</th><th>等价类</th><th>边界值</th><th>场景法</th><th>状态迁移</th><th>正交</th><th>覆盖深度</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>登录 / 注册（D2）</strong></td><td>40</td><td>15</td><td>10</td><td>8</td><td>—</td><td>7（L₉ 选 7 条核心）</td><td>字段级 + 流程级</td></tr>
+      <tr><td><strong>商品 / SKU（D2）</strong></td><td>30</td><td>12</td><td>8</td><td>6</td><td>—</td><td>4（规格 × 分类）</td><td>多规格 + 库存</td></tr>
+      <tr><td><strong>购物车（D2）</strong></td><td>20</td><td>6</td><td>4</td><td>8</td><td>—</td><td>2（店铺 × 优惠）</td><td>缓存一致性</td></tr>
+      <tr><td><strong>订单 / 支付（D3）</strong></td><td>25</td><td>5</td><td>4</td><td>4</td><td>12（9 迁移 × 1 + 3 异常）</td><td>—</td><td>状态机 + 回调幂等</td></tr>
+      <tr><td><strong>会员 / 权限（D3）</strong></td><td>15</td><td>5</td><td>3</td><td>2</td><td>—</td><td>5（角色 × 菜单）</td><td>Sa-Token 鉴权</td></tr>
+      <tr><td><strong>兼容性 / 异常（D3）</strong></td><td>20</td><td>8</td><td>6</td><td>4</td><td>—</td><td>2（端 × 网络）</td><td>三端 + 网络异常</td></tr>
+      <tr><td><strong>合计</strong></td><td><strong>150</strong></td><td><strong>51</strong>（34%）</td><td><strong>35</strong>（23%）</td><td><strong>32</strong>（21%）</td><td><strong>12</strong>（8%）</td><td><strong>20</strong>（13%）</td><td>—</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">拆解原则</div>
+    ① 每个模块至少 2 种方法叠加（不能 100% 等价类）；② 状态迁移法留给订单 / 支付；③ 正交实验只用于 ≥ 3 因子的组合。
+  </div>
+  <p><strong>关键发现</strong>：等价类 34% + 边界值 23% = 57% 字段级覆盖；场景法 21% + 状态迁移 8% = 29% 流程级覆盖；正交 13% 组合覆盖——三者分层，互不重叠。</p>
+
+  <h2 id="sec9">9. 用例评审 Checklist</h2>
+  <p>来源：<code>2026最新AI测试基础一套通关/1、AI测试基础/day03测试执行/</code> 用例评审章节 + <code>qa-manual-istqb</code> skill 评审模板。</p>
+  <p><strong>评审维度（10 条 Checklist）</strong>：</p>
+  <ol>
+    <li><strong>覆盖完整性</strong>：每个需求点至少有 1 条用例（无遗漏）；每条需求点对应到至少 1 种方法。</li>
+    <li><strong>边界就位</strong>：每个数值字段都有上点 / 离点 / 内点；时间阈值有"刚刚到 / 刚刚没到"两侧。</li>
+    <li><strong>异常路径</strong>：每个基本流配 2-3 条备选流（异常 / 取消 / 超时）；不是 0 备选流。</li>
+    <li><strong>幂等覆盖</strong>：支付 / 提交 / 确认收货等"按按钮"操作，至少 1 条重复触发用例。</li>
+    <li><strong>状态机完整</strong>：每个迁移有正常 / 异常前置 / 幂等 3 条；非法前置状态被显式拒绝。</li>
+    <li><strong>可执行性</strong>：前置条件 / 测试数据 / 预期结果三件套齐全；不是"测一下登录能不能成功"这种含糊描述。</li>
+    <li><strong>数据驱动</strong>：同类用例用 YAML / Excel 参数化，避免重复；YAML 字段命名清晰。</li>
+    <li><strong>优先级</strong>：P0（核心交易） / P1（重要流程） / P2（边界 / 异常）三级，P0 必须 100% 通过。</li>
+    <li><strong>可追溯</strong>：每条用例标注来源需求编号 / 文档章节（如 <code>doc/6-核心业务/6-支付流程.md</code> §3）；删除需求时同步删除用例。</li>
+    <li><strong>评审结论</strong>：通过 / 有条件通过 / 不通过 三档；不通过要列具体修改项 + 责任人。</li>
+  </ol>
+  <div class="interview">
+    <div class="who">M1 评审场景</div>
+    D2 评审会上把这 10 条 Checklist 当成评分表——每条用例过一遍，未覆盖的当场补用例。150 条用例 × 10 维度 = 1500 个检查点，半天就能跑完一轮。
+  </div>
+  <p><strong>反模式</strong>：用例只写"输入 + 期望"，不写"前置条件"——执行时数据准备不出来，整条用例作废。</p>
+
+  <h2 id="sec10">10. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>订单自动取消定时任务的边界值用例，<code>update_time = now − 30 分钟</code> 这个上点，期望的正确行为是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 30:00 触发取消；29:59 不触发；30:01 已触发</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 30:00 不触发；29:59 触发；30:01 已触发</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 30:00 / 29:59 / 30:01 全部触发取消</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) 30:00 触发取消；29:59 / 30:01 均不触发</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>订单状态迁移用例，每个迁移至少需要几条用例来覆盖正常路径、异常前置、幂等路径？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 1 条，覆盖正常即可</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 2 条，正常 + 异常</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 3 条，正常 + 异常前置 + 幂等</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 5 条，正常 + 异常 + 幂等 + 兼容性 + 性能</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>角色 × 菜单 × 数据权限的 3 因子 × 3 水平组合，用 <code>L₉(3³)</code> 正交表能从 27 全组合降维到几条用例？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 3 条，每因子抽 1 行</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 9 条，每对因子的每个水平组合恰好出现 1 次</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 12 条，正交表要求每对因子至少出现 4 次</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 27 条，等同全组合，无降维效果</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（五种方法的适用边界 / 150 条用例如何落到 feature_list / 评审 Checklist 在 M1 如何落地）抛给你的 AI 教师追问——单点困惑往往牵出一整条测试设计链，问得越具体，回答越能反哺你的 M1 用例库。
+  </div>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0003-module-boundary-test-points.html">第 3 课 模块边界与可测点</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0005-test-dev-lifecycle.html">第 5 课 测试开发全流程</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0004-methods-cheatsheet.html">五种方法速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0004-methods-cheatsheet.html">五种方法速查卡（reference/0004-methods-cheatsheet.html）</a></li>
+      <li><code>feature_list.json</code> D2 / D3 行</li>
+      <li><code>2026AI+软件测试第一篇课件/func-day01金融web项目/</code> 等价类章节</li>
+      <li><code>2026最新AI测试基础一套通关/1、AI测试基础/day02测试设计/</code> 边界值 + 正交章节</li>
+    </ul>
+    <div>第 4 课到这里就完成了，去第 5 课把测试开发全流程画出来。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=A(0), Q2=C(2), Q3=B(1) ===
+  var correctMap = { q1: '0', q2: '2', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec4', text: '回到第 4 节：再读"边界值分析法"的三点法' },
+    q2: { href: '#sec6', text: '回到第 6 节：再读"状态迁移法"的 3 条用例规则' },
+    q3: { href: '#sec7', text: '回到第 7 节：再读"正交实验法"的 L₉(3³) 降维' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

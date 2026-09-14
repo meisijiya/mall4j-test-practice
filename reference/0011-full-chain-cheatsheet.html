@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>40 条完整链路速查卡 · 第 11 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    @media print {
+      body { font-size: 10pt; }
+      section.card { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3 { color: #000; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>40 条完整链路速查卡</h1>
+  <p class="meta">第 11 课 · A4 打印友好 · 6 folder × 40 用例 + 5 业务码 + 探针</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. 6 folder 速查表</h2>
+    <p>来源：<code>test-cases/postman/mall4j-api-collection.json</code></p>
+    <table>
+      <thead><tr><th>Folder</th><th>条数</th><th>业务码分布</th><th>降级 PASS 判定</th></tr></thead>
+      <tbody>
+        <tr><td><strong>1.公开接口</strong></td><td>8</td><td>T-A × 8</td><td>无需 token，后端启即 PASS</td></tr>
+        <tr><td><strong>2.登录/认证</strong></td><td>3</td><td>T-A × 2 + T-F × 1</td><td>登录写回 token；短信降级 100% PASS（默认禁）</td></tr>
+        <tr><td><strong>3.购物车</strong></td><td>8</td><td>T-A × 6 + 写回 × 2</td><td>L3.6/L3.7 降级 100% PASS</td></tr>
+        <tr><td><strong>4.订单</strong></td><td>8</td><td>T-A × 6 + 写回 × 1 + T-F × 2</td><td>L4.3/L4.4 降级 100% PASS；L4.7 需 admin 发货</td></tr>
+        <tr><td><strong>5.支付</strong></td><td>2</td><td>T-A × 2</td><td>依赖 orderNumber，链路严格串行</td></tr>
+        <tr><td><strong>6.鉴权/异常/边界</strong></td><td>11</td><td>T-F × 5 + T-B × 3 + T-D × 2 + T-E × 1</td><td>鉴权类无 token；跨用户需 fixture SQL</td></tr>
+        <tr><td><strong>合计</strong></td><td><strong>40</strong></td><td>T-A:26 / T-B:3 / T-D:2 / T-E:1 / T-F:8</td><td>—</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>2. 5 业务码断言模板</h2>
+    <p>来源：<code>doc/3-API接口/M1-D5-001-impl-notes.md §1.2</code></p>
+    <table>
+      <thead><tr><th>模板</th><th>业务码</th><th>含义</th><th>覆盖</th><th>JS 模板</th></tr></thead>
+      <tbody>
+        <tr><td><strong>T-A</strong></td><td><code>'00000'</code></td><td>成功</td><td>26</td><td><code>pm.expect(String(j.code)).to.eql('00000');</code></td></tr>
+        <tr><td><strong>T-B</strong></td><td><code>'A00001'</code></td><td>业务异常（密码错/count=0/basketIds 空）</td><td>3</td><td><code>pm.expect(String(j.code)).to.eql('A00001');</code></td></tr>
+        <tr><td><strong>T-D</strong></td><td><code>'A00014'</code></td><td>@NotBlank 参数校验</td><td>2</td><td><code>pm.expect(String(j.code)).to.eql('A00014');</code></td></tr>
+        <tr><td><strong>T-E</strong></td><td><code>'A00005'</code></td><td>服务端异常（AES 解密/短信非手机号）</td><td>1</td><td><code>pm.expect(String(j.code)).to.eql('A00005');</code></td></tr>
+        <tr><td><strong>T-F</strong></td><td><code>!='00000'</code></td><td>宽松（鉴权 401/短信默认关/状态机）</td><td>8</td><td><code>pm.expect(String(j.code)).to.not.eql('00000');</code></td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>铁律</strong>：mall4j <code>ServerResponseEntity.code</code> 是 String。Postman 默认 <code>to.eql(200)</code> 永远 FAIL。显式 <code>String(j.code)</code> 是 D5 必修课。</p>
+  </section>
+  <section class="card">
+    <h2>3. env 20 vars 速查</h2>
+    <p>来源：<code>test-cases/postman/mall4j-api-environment.json</code></p>
+    <table>
+      <thead><tr><th>变量</th><th>默认值</th><th>谁设</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr><td><code>base_url</code></td><td><code>http://localhost:8086</code></td><td>人</td><td>API 根路径</td></tr>
+        <tr><td><code>username</code> / <code>password</code></td><td><code>testuser</code> / <code>test123456</code></td><td>人</td><td>登录凭据（密码 AES 加密前明文）</td></tr>
+        <tr><td><code>token</code></td><td>空</td><td>L2.1 写回</td><td>所有 <code>/p/*</code> 接口 Authorization</td></tr>
+        <tr><td><code>prodId</code> / <code>skuId</code></td><td><code>1</code> / <code>1</code>（探针写回真实值）</td><td>L3.1+L3.2</td><td>商品 / SKU ID（L3.3 加购引用）</td></tr>
+        <tr><td><code>basketId</code></td><td><code>0</code>（加购写回）</td><td>L3.3</td><td>购物车项 ID（L4.1/L4.5/L4.6/L5.1）</td></tr>
+        <tr><td><code>orderNumber</code></td><td>空（submit 写回）</td><td>L4.2</td><td>订单号（L4.5/L4.6/L4.7/L4.8）</td></tr>
+        <tr><td><code>shopId</code> / <code>addrId</code></td><td><code>1</code></td><td>人</td><td>店铺 / 收货地址</td></tr>
+        <tr><td><code>userId</code> / <code>nickName</code></td><td>空</td><td>L2.1</td><td>登录响应回显</td></tr>
+        <tr><td><code>ts</code> / <code>ts_short</code> / <code>nonce</code></td><td>每请求动态</td><td>Pre-request</td><td>防重放 / 注册 mobile 后缀</td></tr>
+        <tr><td><code>newUsername</code> / <code>newPassword</code></td><td>ts 后缀</td><td>人 + ts</td><td>注册用例防冲突</td></tr>
+        <tr><td><code>otherUserAddrId</code></td><td><code>99999</code></td><td>人 + fixture</td><td>L6.7 跨用户改地址 fixture</td></tr>
+        <tr><td><code>orderNumberPaid</code></td><td><code>O_PAID_2024</code></td><td>人 + fixture</td><td>L6.10 取消已付款订单 fixture</td></tr>
+        <tr><td><code>otherUserOrderNumber</code></td><td><code>O9999_OTHER_USER</code></td><td>人 + fixture</td><td>L6.6 跨用户查订单 fixture</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>分工铁律</strong>：<strong>人设进 environment</strong>（base_url / 凭据 / 固定 ID）；<strong>机器设进 collectionVariables</strong>（token / prodId / skuId / basketId / orderNumber）——但写回必须<strong>双写</strong>，详见 §4。</p>
+  </section>
+  <section class="card">
+    <h2>4. 探针机制速查</h2>
+    <p>来源：<code>test-cases/postman/mall4j-api-collection.json</code> 行 798-949</p>
+    <table>
+      <thead><tr><th>探针</th><th>请求</th><th>提取</th><th>写回</th><th>失败降级</th></tr></thead>
+      <tbody>
+        <tr><td><strong>L3.1</strong></td><td><code>GET /prod/prodInfo?prodId=1</code></td><td><code>j.data.prodId</code></td><td><code>prodId</code> 双写</td><td><code>prodId=1</code></td></tr>
+        <tr><td><strong>L3.2</strong></td><td><code>GET /sku/getSkuList?prodId={{prodId}}</code></td><td><code>j.data[0].skuId || j.data[0].id</code></td><td><code>skuId</code> 双写</td><td><code>skuId=1</code></td></tr>
+      </tbody>
+    </table>
+    <p><strong>L3.1 写回伪代码</strong>：</p>
+    <pre><code>var _j = pm.response.json();
+if (_j &amp;&amp; _j.data &amp;&amp; _j.data.prodId) {
+  var _v = _j.data.prodId;
+  pm.collectionVariables.set('prodId', String(_v));   // 双写 1/2
+  pm.environment.set('prodId', String(_v));            // 双写 2/2
+}</code></pre>
+    <p class="hint"><strong>为什么探两次</strong>：<code>/prod/prodInfo</code> 返回单个 ProdDto，<code>/sku/getSkuList</code> 返回 List&lt;SkuDto&gt;。两次 GET 让"先验证商品、再验证 SKU"语义清晰。</p>
+  </section>
+  <section class="card">
+    <h2>5. 三种场景 PASS 分布</h2>
+    <p>来源：<code>test-cases/api-40-cases.md §2</code></p>
+    <table>
+      <thead><tr><th>场景</th><th>触发条件</th><th>预计 PASS</th><th>预计 FAIL</th></tr></thead>
+      <tbody>
+        <tr><td><strong>黄金路径</strong></td><td>8086 + 注 fixture + admin 8085</td><td>38-40 / 40</td><td>0-2</td></tr>
+        <tr><td><strong>降级路径</strong></td><td>8086 启但不注 fixture</td><td>30-34 / 40</td><td>6-10</td></tr>
+        <tr><td><strong>失败路径</strong></td><td>8086 未启</td><td>0 / 40</td><td>40（HTTP 失败）</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>判定</strong>：好用例集 = 黄金 38-40 + 降级 30-34 + 失败 0。全 PASS 可能 fixture 注太重；全 0 PASS 可能鉴权用例设计错（应 HTTP 401 而非业务码 00000）。</p>
+  </section>
+  <section class="card">
+    <h2>6. D4 v2.1 → D5 v3.0 关键升级</h2>
+    <p>来源：<code>doc/3-API接口/M1-D5-001-impl-notes.md §2</code></p>
+    <table>
+      <thead><tr><th>维度</th><th>D4 v2.1</th><th>D5 v3.0</th><th>变化</th></tr></thead>
+      <tbody>
+        <tr><td>用例数</td><td>20</td><td><strong>40</strong></td><td>+20（2 探针 + 5 鉴权 + 8 异常 + 5 链路）</td></tr>
+        <tr><td>Folder 数</td><td>5</td><td><strong>6</strong></td><td>支付拆出</td></tr>
+        <tr><td>探针机制</td><td>无</td><td><strong>L3.1 + L3.2</strong></td><td>自动取 prodId/skuId，修正 D4 跨商品</td></tr>
+        <tr><td>业务码断言</td><td>2 模板</td><td><strong>5 模板</strong></td><td>+ @NotBlank + 服务异常 + 宽松</td></tr>
+        <tr><td>env 变量数</td><td>17</td><td><strong>20</strong></td><td>+ otherUserAddrId / orderNumberPaid / otherUserOrderNumber</td></tr>
+        <tr><td>JSON 大小</td><td>80 KB</td><td><strong>110 KB</strong></td><td>+37%</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>7. 已知坑速查（5 条）</h2>
+    <p>来源：<code>doc/3-API接口/M1-D5-001-impl-notes.md §8</code></p>
+    <table>
+      <thead><tr><th>#</th><th>坑</th><th>错误</th><th>正确</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>Postman v2.1 schema 不支持外链 JS</td><td><code>event.script.exec = ["require('./pre.js')"]</code></td><td>所有 snippet <strong>必须内联</strong>到 <code>exec</code> 字符串数组</td></tr>
+        <tr><td>2</td><td>业务码断言：字符串 vs 数字</td><td><code>pm.expect(j.code).to.eql(200)</code></td><td><code>pm.expect(String(j.code)).to.eql('00000')</code></td></tr>
+        <tr><td>3</td><td>token 变量作用域</td><td>登录 test <strong>单写</strong> collectionVariables</td><td><strong>双写</strong> collectionVariables + environment</td></tr>
+        <tr><td>4</td><td>path 变量不能 query</td><td><code>PUT /cancel?orderNumber=X</code></td><td><code>{{base_url}}/p/myOrder/cancel/{{orderNumber}}</code></td></tr>
+        <tr><td>5</td><td>DELETE 方法 body</td><td><code>application/x-www-form-urlencoded</code></td><td>用 <code>application/json</code> + raw JSON 数组</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>使用</strong>：打印贴桌边；报错查 §7；改断言查 §2；填空查 §3；判分布查 §5。</p>
+  </section>
+</main>
+<footer>
+  <p class="hint">来源：collection v3.0 + env + api-40-cases.md + impl-notes.md + 0011 lesson</p>
+</footer>
+</body>
+</html>

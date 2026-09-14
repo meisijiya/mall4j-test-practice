@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>测试开发全流程速查卡 · 第 5 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* A4 打印优化 */
+    @media print {
+      body { font-size: 10pt; }
+      section.card { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3 { color: #000; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>测试开发全流程速查卡</h1>
+  <p class="meta">第 5 课 · A4 打印友好 · 14 天端到端流程总图专用</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 端到端流程图（ASCII）</h2>
+    <p>来源：<code>PROJECT_TARGET_BOOK.md</code> 第四章 D1-D14（v3.0 里程碑驱动完整版）。</p>
+<pre class="ascii">
+    ┌──────────────────────────────────────────────────────────────┐
+    │  v3.0 不是 14 天死线 · 里程碑驱动 · 建议每天 5h · 弹性压缩    │
+    └──────────────────────────────────────────────────────────────┘
+
+    [D1 需求评审] ──► [D2-D3 功能用例] ──► [D4-D5 接口调试]
+            │                    │                    │
+            ▼                    ▼                    ▼
+   XMind 业务脑图         150 用例 + 18 bug     Postman 40 用例
+            │                    │                    │
+            └────────── M1 功能 + 接口 ────────────────┘
+                                       │
+                                       ▼
+            [D6-D8 接口+UI 双自动化] ──► [D9 CI 接入]
+                       │                       │
+                       ▼                       ▼
+            pytest+Playwright 80+ 用例     GitHub Actions 绿勾
+            + UI 12 场景                   + Allure 报告
+                       │                       │
+                       └──── M2 双自动化+CI ────┘
+                                  │
+                                  ▼
+            [D10-D11 性能压测] ──► [D12-D13 mall-ai]
+                       │                       │
+                       ▼                       ▼
+            Locust 3 场景 + 调优       LLM-as-Judge
+                       │                       │
+                       └────── M3 + M4 ────────┘
+                                       │
+                                       ▼
+            [D14+ 简历 v3 + 投递]    ←── M2 起并行启动
+                       │
+                       ▼
+            3 GitHub 仓库 + 简历 v3 + 投递 10-15 家
+                       │
+                       ▼
+                       M5
+
+    ★ M2 达标即投日常实习，不等完美（最低可投门禁）
+    ★ 秋招 2026-09~11 / 春招 2027-02~04 节点自然对齐</pre>
+  </section>
+
+  <section class="card">
+    <h2>2. 七大阶段对照表（输入 / 动作 / 输出 / 工具 / 简历句）</h2>
+    <table>
+      <thead>
+        <tr><th>阶段</th><th>输入</th><th>动作</th><th>输出</th><th>工具</th><th>简历可写句</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>一 需求评审</strong></td>
+          <td>mall4j 业务文档 + 演示站</td>
+          <td>通读业务 → 画脑图 → 评审纪要</td>
+          <td>XMind 业务脑图 + 评审纪要</td>
+          <td>XMind / draw.io / 浏览器</td>
+          <td>"参与需求评审，独立完成 XX 模块测试方案设计"</td>
+        </tr>
+        <tr>
+          <td><strong>二 功能用例</strong></td>
+          <td>业务脑图 + 方法论课件</td>
+          <td>等价类 / 边界值 / 场景法 / 状态迁移设计用例 + 提 Bug + 写报告</td>
+          <td>150 条用例 + 18 缺陷 + 功能测试报告</td>
+          <td>Excel / Zentao / 禅道 / TestLink</td>
+          <td>"电商系统功能测试，编写 150 条测试用例，发现 18 个有效 Bug"</td>
+        </tr>
+        <tr>
+          <td><strong>三 接口调试</strong></td>
+          <td>mall4j Swagger + Postman</td>
+          <td>调通核心接口 + 写断言 + 链路关联</td>
+          <td>Postman 用例集 40 条 + Runner 报告</td>
+          <td>Postman / Apifox / Knife4j</td>
+          <td>"接口调试与用例设计，使用 Postman 完成完整链路验证"</td>
+        </tr>
+        <tr>
+          <td><strong>四 双自动化</strong></td>
+          <td>接口脚本 + Playwright 起步</td>
+          <td>pytest+YAML+Allure + Playwright+POM</td>
+          <td>接口 80+ 用例 + UI 12 场景 + Allure 报告</td>
+          <td>pytest / requests / Playwright / Allure</td>
+          <td>"基于 pytest+Playwright 搭建接口/UI 自动化框架，覆盖 80+ 接口 + 12 场景"</td>
+        </tr>
+        <tr>
+          <td><strong>五 CI 接入</strong></td>
+          <td>GitHub 仓库 + workflow 语法</td>
+          <td>写 <code>.github/workflows/api-test.yml</code> → push 触发</td>
+          <td>GitHub Actions 绿勾 + workflow 文件</td>
+          <td>GitHub Actions / Allure</td>
+          <td>"接入 GitHub Actions 实现 push 触发自动执行 + Allure 报告"</td>
+        </tr>
+        <tr>
+          <td><strong>六 性能压测</strong></td>
+          <td>mall4j 3 核心接口 + Locust 脚本</td>
+          <td>写 locustfile.py → 阶梯加压 → 调优复测</td>
+          <td>3 场景压测报告 + 调优前后对比</td>
+          <td>Locust / wrk / Jmeter（了解）</td>
+          <td>"使用 Locust 做性能测试，覆盖登录/查询/下单 3 场景，输出 TPS/P99/瓶颈分析报告"</td>
+        </tr>
+        <tr>
+          <td><strong>七 报告 + 简历</strong></td>
+          <td>一到六全部产出物</td>
+          <td>写两份报告 + 简历 v3 + 建 3 个 GitHub 仓库</td>
+          <td>2 份 PDF 报告 + 简历 v3 + 3 仓库绿勾</td>
+          <td>GitHub / Markdown / Typora</td>
+          <td>"3 个开源测试项目，GitHub star 可查，4 件套 + AI 亮点完整覆盖"</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint">"动作"列 = 当天 5h 时间块分配；"输出"列 = 完成标志；"简历可写句"列 = 阶段达标后<strong>直接拷贝</strong>。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 简历 6 句速查</h2>
+    <ol>
+      <li><em>电商系统功能测试，编写测试用例 150 条（等价类/边界值/场景法/状态迁移），覆盖商品/购物车/订单/支付/会员 5 大模块，发现有效 Bug 18 个，输出功能测试报告。</em></li>
+      <li><em>接口调试与用例设计，使用 Postman + Swagger（Knife4j）完成 40 条接口用例与"登录→加购→下单→支付"完整链路验证。</em></li>
+      <li><em>基于 pytest + requests + YAML + Allure 搭建接口自动化框架，覆盖 80+ 核心接口（鉴权/CRUD/异常/参数化/边界）。</em></li>
+      <li><em>基于 Playwright + POM 模式搭建 Web UI 自动化框架，实现 12 个核心场景的自动化回归。</em></li>
+      <li><em>接入 GitHub Actions 实现 push 触发自动执行 pytest + Playwright 用例，自动生成并归档 Allure 报告。</em></li>
+      <li><em>使用 Locust 对登录/查询/下单 3 个核心接口做压测，覆盖 50-500 并发阶梯加压，输出 TPS/P99 报告 + 一轮调优复测对比 + 优化建议。</em></li>
+    </ol>
+    <p class="hint"><strong>数字 ×2 红线</strong>：所有数字严格 ×1 写（已等于实际产出），×2 是上限——真实做了 150 条 / 80+ 接口 / 12 场景 / 18 bug → 简历直接写这些数字（这是上限，不是 ×2 后）。来源：<code>PROJECT_TARGET_BOOK.md</code> 5.1。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 框架分层速查（接口 vs UI）</h2>
+    <table>
+      <thead><tr><th>维度</th><th>接口自动化（pytest）</th><th>UI 自动化（Playwright）</th></tr></thead>
+      <tbody>
+        <tr><td><strong>结构</strong></td><td><code>common / base_api + data / yaml + testcases + reports</code></td><td>POM 五层：<code>page / base / testcase / common / data</code></td></tr>
+        <tr><td><strong>核心</strong></td><td>requests + allure</td><td>playwright + POM</td></tr>
+        <tr><td><strong>用例规模</strong></td><td>80+ 接口用例</td><td>12 场景</td></tr>
+        <tr><td><strong>入口</strong></td><td><code>pytest testcase/</code></td><td><code>pytest testcase/</code>（同入口）</td></tr>
+        <tr><td><strong>报告</strong></td><td>Allure HTML</td><td>Allure HTML + 截图</td></tr>
+        <tr><td><strong>迁移规则</strong></td><td>课程教 Python，直接落地</td><td><strong>课程教 Selenium → 按 8.3 迁移 Playwright</strong>（概念全学，实现全换）</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">POM 五层迁移保留（page / base / testcase / common / data），驱动层用 Playwright 重写——自动等待 + <code>expect</code> 断言更现代，flaky 率更低。</p>
+  </section>
+
+  <section class="card">
+    <h2>5. GitHub Actions workflow 最小骨架</h2>
+<pre><code>name: API + UI Test
+on: [push]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install -r requirements.txt
+      - run: playwright install --with-deps chromium
+      - run: pytest testcase/ --alluredir=reports/
+      - uses: simple-elf/allure-report-action@master
+        if: always()
+        with:
+          allure_results: reports</code></pre>
+    <p class="hint">三件套：workflow 文件 + 绿勾截图 + Allure 在线预览（actions artifact 下载链接）= 阶段五完整交付。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 风险预案与降级</h2>
+    <table>
+      <thead><tr><th>阶段</th><th>风险</th><th>降级方案</th><th>面试话术</th></tr></thead>
+      <tbody>
+        <tr><td>阶段一</td><td>环境卡住</td><td>演示站 + Swagger 接口定义</td><td>"环境跑通过程已记录，测试岗真实工作常态"</td></tr>
+        <tr><td>阶段四</td><td>Selenium 课程 vs Playwright 落地</td><td>概念全学 + 实现全换</td><td>"概念全学，实现全换，POM 思想相通"</td></tr>
+        <tr><td>阶段六</td><td>Locust 与 mall4j 鉴权不匹配</td><td>登录必做 + 鉴权压测脚本写但标"待接入"</td><td>"鉴权压测的脚本也写了，待接入"</td></tr>
+        <tr><td>M4</td><td>LLM API Key / 单服务起不来</td><td>平台跑通 + 规则类指标 + LLM-as-Judge 待接入</td><td>"评价体系完整，LLM-as-Judge 待接入"</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>7. M4 预告：mall-ai Agent 评测</h2>
+    <ul>
+      <li><strong>本地部署</strong>：docker-compose 拉起 MySQL / Chroma / RabbitMQ + 后端 + 前端</li>
+      <li><strong>LLM 接入</strong>：DeepSeek / 通义 / 智谱（国内可直连低价 Key）</li>
+      <li><strong>4 核心场景</strong>：开放任务 / 政策 RAG / 工具调用 / 写库关卡</li>
+      <li><strong>50 条 Agent 用例</strong>：每场景 12-13 条，覆盖正常 / 异常 / 边界 / 对抗 4 类</li>
+      <li><strong>4 维度评测</strong>：事实性 / 工具选择率 / 拒答率 / 幻觉率</li>
+      <li><strong>LLM-as-Judge</strong>：用大模型当裁判，自动评估输出质量</li>
+    </ul>
+    <p class="hint">M4 完成简历可写句：<em>基于 docker-compose 独立部署 mall-ai 电商售后智能 Agent 平台，配置 LLM 接入并完成 4 个核心场景冒烟；编写 50 条 Agent 测试用例，落地 LLM-as-Judge 评分脚本并实跑，输出 4 维度评测报告。</em></p>
+  </section>
+
+</main>
+
+<footer>
+  <p><strong>源</strong>：<code>PROJECT_TARGET_BOOK.md</code> 第四章 D1-D14 + 第五章 5.1-5.4 + 第六章 6.2 + 第九章阶段→简历对照表 + <code>MISSION.md</code>。</p>
+  <p><strong>范围</strong>：测试开发全流程（功能 / 接口 / UI 自动化 / 性能 / CI / 简历）总览。mall-ai Agent 评测（M4）仅作预告，详细留到 M4 启动时。</p>
+  <p><strong>打印建议</strong>：A4 纵向；浏览器打开 → Ctrl/Cmd+P → 关闭页眉页脚 → 边距"自定义 8mm"。每张卡可独立打印成 1 页 A4。</p>
+</footer>
+
+</body>
+</html>

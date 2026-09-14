@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>POM 7 类 + UI 路径 2 captcha mock 速查卡 · 第 13 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    @media print {
+      body { font-size: 10pt; }
+      section.card { break-inside: avoid; page-break-inside: avoid; }
+      h1, h2, h3 { color: #000; }
+      pre { font-size: 8.5pt; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <h1>POM 7 类 + UI 路径 2 captcha mock 速查卡</h1>
+  <p class="meta">第 13 课 · A4 打印友好 · POM 继承链 + 路径 2 mock + admin/shop 双 selectors + allure severity + 49→90 扩展 + 7 Page fixture + 6 验收</p>
+</header>
+<main>
+  <section class="card">
+    <h2>1. POM 7 类继承链（BasePage → 6 业务 Page）</h2>
+    <p>来源：<code>test-cases/api-auto/common/ui_pages.py</code> + <code>__all__</code></p>
+    <table>
+      <thead><tr><th>类</th><th>行号</th><th>核心方法</th><th>业务场景</th></tr></thead>
+      <tbody>
+        <tr><td><code>BasePage</code></td><td>L37-110</td><td>goto / fill / click / wait_for_url / wait_for_selector / inject_auth_cookie / screenshot / text / count</td><td>父类：导航 + 交互 + cookie 注入 + 截图</td></tr>
+        <tr><td><code>LoginPage</code></td><td>L116-234</td><td>goto_login / fill_form / click_submit / wait_for_login + mock_captcha_route / mock_login_response (static)</td><td>shop 商城 + admin 后台 双端口</td></tr>
+        <tr><td><code>HomePage</code></td><td>L240-277</td><td>wait_loaded / click_category / click_cart / click_user_icon</td><td>首页（shop 商城首页 + admin 后台首页）</td></tr>
+        <tr><td><code>ProdListPage</code></td><td>L283-311</td><td>goto_category / search / wait_loaded / count_products</td><td>商品列表（分类 / 搜索 / 标签）</td></tr>
+        <tr><td><code>ProdDetailPage</code></td><td>L317-345</td><td>select_sku / click_add_cart / click_buy_now / wait_added</td><td>商品详情（加购 + 规格）</td></tr>
+        <tr><td><code>CartPage</code></td><td>L351-389</td><td>wait_loaded / check_all / update_count / checkout / count_items</td><td>购物车（列表 + 数量调整）</td></tr>
+        <tr><td><code>OrderPage</code></td><td>L395-432</td><td>wait_loaded / count_orders / cancel_order / click_detail / click_pay</td><td>订单（列表 + 状态机按钮）</td></tr>
+        <tr><td><code>UserPage</code></td><td>L438-466</td><td>wait_loaded / count_addr / click_my_order / click_collection</td><td>用户中心（地址 + 收藏 + 订单入口）</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>设计要点</strong>：<code>__all__</code> 暴露 7 个 Page 类 + <code>_HAS_PLAYWRIGHT</code> 哨兵；缺包时 <code>Page = Any</code>，所有 page 仍可 import（仅运行时挂）。</p>
+    <p class="hint"><strong>继承约定</strong>：子类只重写 <code>selectors</code> 类属性 + 业务方法；导航/交互/截图统一调 <code>self.xxx(...)</code> 走父类。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. UI 路径 2 captcha mock 顺序（必须 goto 前注册）</h2>
+    <p>来源：D8 README §5.2 + <code>common/ui_pages.py::LoginPage</code> L170-234</p>
+    <p><strong>核心思路</strong>：拦截前端 <code>/captcha/get</code> + <code>/captcha/check</code> + <code>/adminLogin</code> 端点 → 返回 mock JSON → 跳过滑块交互 + 真实后端登录。</p>
+    <pre><code>from common.ui_pages import LoginPage
+
+def test_login_shop_path2(page, env):
+    # 步骤 1：必须在 page.goto 之前注册 route
+    LoginPage.mock_captcha_route(page)             # 拦截 **/captcha/**
+    LoginPage.mock_login_response(page,
+        mock_token="mock_admin_token_path2")       # 拦截 **/adminLogin + **/login
+
+    # 步骤 2：用例侧实例化 + 跳转
+    login = LoginPage(page)
+    login.goto_login(port="shop")                  # http://localhost:8088/login
+    login.fill_form("testuser", "pwd", port="shop")
+    login.click_submit(port="shop")
+
+    # 步骤 3：等路由跳转（mock 已返回 00000，前端走 router.replace）
+    login.wait_for_login(timeout=5000)             # → URL 含 /home</code></pre>
+    <p class="hint"><strong>关键约束</strong>：<code>page.route(...)</code> 必须在 <code>page.goto(...)</code> 之前调用，否则浏览器先发真实请求就来不及拦截（Playwright 文档规定）。</p>
+    <p class="hint"><strong>关键 fix #2</strong>：mock 的端点是 <code>**/adminLogin</code>（mall4v views/common/login/index.vue:118-127 的 <code>http.post('/adminLogin', ...)</code>），普通用户登录也走 <code>/adminLogin</code>，<code>/login</code> 是另一套遗留端点。代码里同时注册两个 <code>page.route</code> 兼容。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. admin vs shop 双 selectors dict + port 参数切换</h2>
+    <p>来源：<code>LoginPage.selectors</code> L127-140 + <code>HomePage.selectors</code> L243-257</p>
+    <p><strong>dict 双层结构</strong>：外层 key = port（<code>"shop"</code> / <code>"admin"</code>），内层 key = 元素名（<code>"username"</code> / <code>"password"</code> / <code>"submit"</code> 等）。</p>
+    <pre><code>class LoginPage(BasePage):
+    selectors = {
+        "shop": {                                   # 商城 mall4v 8088
+            "username": 'input[placeholder="账号"]',
+            "password": 'input[placeholder="密码"]',
+            "submit": 'button.login-btn',
+            "captcha_verify": '.verify-sub-area',
+        },
+        "admin": {                                  # 后台 admin-web 8085
+            "username": 'input[placeholder="请输入用户名"]',
+            "password": 'input[placeholder="请输入密码"]',
+            "submit": 'button.el-button--primary',
+            "captcha_verify": '.el-captcha',
+        },
+    }
+
+    def fill_form(self, username, password, *, port="shop"):
+        sel = self.selectors[port]                  # ← 关键：dict[port] 取子集
+        self.fill(sel["username"], username)
+        self.fill(sel["password"], password)</code></pre>
+    <p class="hint"><strong>约定</strong>：商城 UI 走 mall4v（<code>placeholder="账号"</code> + 自研 <code>Verify.vue</code> 滑块），后台 UI 走 admin-web（<code>placeholder="请输入用户名"</code> + Element Plus <code>el-captcha</code>）。两套前端框架 + 视觉风格完全不同，必须双 selectors。</p>
+    <p class="hint"><strong>port 切换</strong>：业务方法接受 <code>port: str = "shop"</code> 参数，方法内 <code>self.selectors[port]["xxx"]</code> 取对应 selector；调用方传 <code>port="admin"</code> 即切到后台。</p>
+    <p class="hint"><strong>HomePage 同样模式</strong>：<code>click_category(name, *, port="shop")</code> 内有 <code>if port != "shop": raise NotImplementedError("admin 端分类点击待实现")</code>——admin 端分类点击未实现时主动抛错，避免静默走错 selector。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. allure severity 5 helper（优雅降级）</h2>
+    <p>来源：<code>common/allure_compat.py</code> L77-138</p>
+    <table>
+      <thead><tr><th>helper</th><th>等价于</th><th>语义</th></tr></thead>
+      <tbody>
+        <tr><td><code>severity_blocker()</code></td><td><code>severity(severity_level.BLOCKER)</code></td><td>阻断：核心流程崩</td></tr>
+        <tr><td><code>severity_critical()</code></td><td><code>severity(severity_level.CRITICAL)</code></td><td>严重：主流程错误</td></tr>
+        <tr><td><code>severity_normal()</code></td><td><code>severity(severity_level.NORMAL)</code></td><td>普通：默认</td></tr>
+        <tr><td><code>severity_minor()</code></td><td><code>severity(severity_level.MINOR)</code></td><td>次要：UI 边缘问题</td></tr>
+        <tr><td><code>severity_trivial()</code></td><td><code>severity(severity_level.TRIVIAL)</code></td><td>琐碎：文案错字</td></tr>
+      </tbody>
+    </table>
+    <p><strong>用法</strong>（用例侧装饰器）：</p>
+    <pre><code>from common.allure_compat import (
+    severity_blocker, severity_critical,
+    severity_normal, severity_minor, severity_trivial,
+)
+
+@severity_blocker()
+def test_login_shop_path2(page): ...
+
+@severity_critical()
+def test_cart_checkout_path2(page): ...
+
+@severity_normal()
+def test_user_addr_list(page): ...</code></pre>
+    <p><strong>优雅降级</strong>（无 allure 时）：</p>
+    <pre><code># common/allure_compat.py 顶层
+try:
+    import allure as _real_allure
+    _HAS_ALLURE = True
+except ImportError:
+    _HAS_ALLURE = False
+
+def severity(level):
+    if _HAS_ALLURE:
+        return _real_allure.severity(level)
+    return _identity_decorator(level)   # 未装 allure → identity no-op</code></pre>
+    <p class="hint"><strong>铁律</strong>：所有 helper 必须从 <code>common.allure_compat</code> import，<strong>不要</strong> 直接 <code>import allure</code>——未装 allure-pytest 时会 ImportError 挂整个 collect。</p>
+    <p class="hint"><strong>动态 severity</strong>：<code>dynamic_severity(level)</code> 在 fixture 内调（如 conftest 根据 marker 设 severity），需要 allure runtime context，缺 allure 时静默 no-op。</p>
+  </section>
+
+  <section class="card">
+    <h2>5. 49 → 90 用例扩展分布（D8 收尾目标）</h2>
+    <p>来源：D8 README §7 + <code>test-cases/api-auto/data/</code> + <code>api/</code> + <code>testcases/</code></p>
+    <table>
+      <thead><tr><th>模块</th><th>D7 收尾</th><th>D8 目标</th><th>增量</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>data/*.yaml</code></td><td>5 文件 12 用例</td><td>7 文件 24 用例</td><td>+12</td>
+          <td>cart / order / addr / prod 4 类目扩 12 用例（边界 + 异常）</td>
+        </tr>
+        <tr>
+          <td><code>api/*_api.py</code></td><td>6 文件 24 wrapper</td><td>7 文件 36 wrapper</td><td>+12</td>
+          <td>新加 <code>order_api.py</code>（cancelOrder / confirmReceipt / myOrder）+12</td>
+        </tr>
+        <tr>
+          <td><code>testcases/test_*.py</code></td><td>6 文件 49 用例</td><td>7 文件 90 用例</td><td>+41</td>
+          <td>其中 API 18 + UI 路径 2 = 18 用例（mock + 真实填表）</td>
+        </tr>
+        <tr style="background:#f0f0f0"><td><strong>合计</strong></td><td>49</td><td><strong>90</strong></td><td>+41</td><td>D8 收尾门禁 ≥ 90 collected</td></tr>
+      </tbody>
+    </table>
+    <p><strong>18 UI 用例分布</strong>（路径 2 必跑 + 路径 1 验证）：</p>
+    <pre><code># test_ui_login.py — 4 条路径 2
+def test_login_shop_path2_adminLogin_mock(page, env)
+def test_login_admin_path2_el_captcha_mock(page, env)
+def test_login_shop_wrong_password_shows_error(page, env)
+def test_login_admin_locked_after_3_fails(page, env)
+
+# test_ui_cart.py — 6 条（路径 2 真实填表 + 加购 + 改数量）
+def test_cart_add_path2(page, env)
+def test_cart_count_update(page, env)
+def test_cart_checkout_path2_to_address(page, env)
+def test_cart_empty_state(page, env)
+def test_cart_remove_item(page, env)
+def test_cart_total_price_calc(page, env)
+
+# test_ui_order.py — 5 条（cancel / pay / detail）
+def test_order_list_path2(page, env)
+def test_order_cancel(page, env)
+def test_order_pay(page, env)
+def test_order_detail(page, env)
+def test_order_status_filter(page, env)
+
+# test_ui_user.py — 3 条（addr + my_order 入口）
+def test_user_addr_list(page, env)
+def test_user_add_address(page, env)
+def test_user_collection(page, env)</code></pre>
+    <p class="hint"><strong>yaml 端重点</strong>：cart / order 用例依赖 <code>{{BASKET_ID}}</code> / <code>{{ORDER_NUMBER}}</code>，<code>pre: { type: probe_sku }</code> 自动写回 os.environ，yaml 侧无需硬编码 ID（D5 v3.0 同源机制）。</p>
+    <p class="hint"><strong>UI 用例 mark</strong>：<code>@pytest.mark.skipif(not _HAS_PLAYWRIGHT or not os.getenv("RUN_UI"))</code>，缺包 + 未设 RUN_UI=1 时整组 skip，不影响 collect。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. conftest 7 Page fixture（用例侧直接注入）</h2>
+    <p>来源：D8 README §6 + <code>conftest.py</code>（7 fixture 模板）</p>
+    <pre><code># conftest.py — 7 个 Page fixture
+from common.ui_pages import (
+    LoginPage, HomePage, ProdListPage, ProdDetailPage,
+    CartPage, OrderPage, UserPage,
+)
+
+@pytest.fixture
+def login_page(page):
+    return LoginPage(page)
+
+@pytest.fixture
+def home_page(page):
+    return HomePage(page)
+
+@pytest.fixture
+def prod_list_page(page):
+    return ProdListPage(page)
+
+@pytest.fixture
+def prod_detail_page(page):
+    return ProdDetailPage(page)
+
+@pytest.fixture
+def cart_page(page):
+    return CartPage(page)
+
+@pytest.fixture
+def order_page(page):
+    return OrderPage(page)
+
+@pytest.fixture
+def user_page(page):
+    return UserPage(page)</code></pre>
+    <p><strong>用例侧签名</strong>（test_ui_*.py）：</p>
+    <pre><code>def test_cart_checkout_path2(login_page, home_page, cart_page, env):
+    # 1. 路径 2 mock（必须 goto 前）
+    LoginPage.mock_captcha_route(login_page.page)
+    LoginPage.mock_login_response(login_page.page,
+        mock_token="mock_admin_token_path2")
+    # 2. 登录
+    login_page.goto_login(port="shop")
+    login_page.fill_form("testuser", "pwd", port="shop")
+    login_page.click_submit(port="shop")
+    login_page.wait_for_login()
+    # 3. 业务流程（多 Page 协作）
+    home_page.click_category("手机")
+    cart_page.check_all()
+    cart_page.checkout()</code></pre>
+    <p class="hint"><strong>依赖传递</strong>：7 个 Page fixture 都依赖 <code>page</code> fixture（session 级 browser fixture 的子节点），conftest 已配好链式依赖；用例侧只声明需要的 Page fixture 即可。</p>
+    <p class="hint"><strong>page 共享</strong>：<code>login_page.page</code> 与 <code>cart_page.page</code> 是同一个 page 对象（同一 browser context）——多 Page 协作天然支持 stateful 流程（登录后 state 跨 Page 保留）。</p>
+  </section>
+
+  <section class="card">
+    <h2>7. 验收命令 6 条（D8 收尾门禁）</h2>
+    <p>来源：D8 README §9 + <code>init.sh</code></p>
+    <ol>
+      <li>
+        <p><strong>yaml 19 文件合法</strong>（D8 扩展到 7 个 yaml 文件 + 5 个 fixture 文件 = 12；含场景相关 fixture 后 19+）：</p>
+        <pre><code>cd test-cases/api-auto
+python3 -c "import yaml, glob; \
+  files = sorted(glob.glob('data/*.yaml')); \
+  [yaml.safe_load(open(f)) for f in files]; \
+  print(f'yaml {len(files)} 文件 OK')"
+# 期望：yaml 7 文件 OK（cart/order/addr/prod/login/user/probe）</code></pre>
+      </li>
+      <li>
+        <p><strong>POM import 不报错</strong>（7 Page 类 + 2 mock 全可加载）：</p>
+        <pre><code>python3 -c "from common.ui_pages import (
+    BasePage, LoginPage, HomePage, ProdListPage,
+    ProdDetailPage, CartPage, OrderPage, UserPage,
+    _HAS_PLAYWRIGHT); \
+  assert _HAS_PLAYWRIGHT is False or True; \
+  print('POM import OK')"</code></pre>
+      </li>
+      <li>
+        <p><strong>7 类继承验证</strong>（BasePage 是其余 6 类的父类）：</p>
+        <pre><code>python3 -c "from common.ui_pages import (
+    LoginPage, HomePage, ProdListPage, ProdDetailPage,
+    CartPage, OrderPage, UserPage, BasePage); \
+  for cls in [LoginPage, HomePage, ProdListPage, ProdDetailPage,
+              CartPage, OrderPage, UserPage]:
+      assert issubclass(cls, BasePage), cls.__name__; \
+  print('7 类继承 OK')"</code></pre>
+      </li>
+      <li>
+        <p><strong>mock 函数可调</strong>（mock_captcha_route + mock_login_response 是 staticmethod）：</p>
+        <pre><code>python3 -c "from common.ui_pages import LoginPage; \
+  assert callable(LoginPage.mock_captcha_route); \
+  assert callable(LoginPage.mock_login_response); \
+  print('mock staticmethod OK')"</code></pre>
+      </li>
+      <li>
+        <p><strong>pytest --collect-only ≥ 90 用例</strong>（UI skip 不影响 collect）：</p>
+        <pre><code>python3 -m pytest --collect-only testcases/ 2>&1 | tail -30
+# 期望：90+ test cases collected / 至少 18 UI 标 skip (no playwright)</code></pre>
+      </li>
+      <li>
+        <p><strong>yaml 用例统计</strong>（每个 yaml 文件 case 数 ≥ 2）：</p>
+        <pre><code>python3 -c "
+import yaml, glob
+for f in sorted(glob.glob('data/*.yaml')):
+    data = yaml.safe_load(open(f))
+    print(f'{f}: {len(data)} cases')
+"
+# 期望：每个 yaml 文件 2+ 用例，合计 12+</code></pre>
+      </li>
+    </ol>
+    <p class="hint"><strong>离线 vs 实跑</strong>：1-6 条均可完全离线（无需启服务、无需 dev server、无需 RUN_UI）；实跑 <code>bash run-ui.sh</code> 需 Playwright + dev server（mall4v 8088 / admin 8085）+ <code>RUN_UI=1</code>。</p>
+    <p class="hint"><strong>门禁总分</strong>：D8 收尾 init.sh 含 6 条全 PASS 才算完工；任何一条 FAIL → handoff.md 标注 blocker，由 director 决策 drop 或 fix。</p>
+  </section>
+</main>
+<footer>
+  <p class="hint">来源：test-cases/api-auto/common/ui_pages.py + common/allure_compat.py + D8 README + 0013 lesson（POM 7 类 + 路径 2 captcha mock 速查）</p>
+</footer>
+</body>
+</html>

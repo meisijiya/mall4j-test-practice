@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 3 课 模块边界与可测点</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <div class="tagblock">
+    <span class="tag">第 3 课</span>
+    <span class="tag">难度 ★★★☆☆</span>
+    <span class="tag">时长 35 分钟</span>
+    <span class="tag accent">实战对象：模块边界表</span>
+  </div>
+
+  <h1>第 3 课：模块边界与可测点（鉴权 / 幂等 / 分布式锁 / 参数校验 / 分页）</h1>
+
+  <blockquote>
+    <p><strong>本课 Mission</strong>：在 5 分钟内讲清"mall4j 七个模块分别归属哪个后端包 + 哪些测试点最容易出 Bug"。</p>
+    <p><strong>读者画像</strong>：双非本科大四 / Java + Python 基础 / 零实习 / 主攻测开 / 已学完第 1-2 课。</p>
+    <p><strong>前置依赖</strong>：第 1 课业务全景（七模块、主链路、五流框架）+ 第 2 课三流合一与订单状态机。</p>
+    <p><strong>ZPD</strong>：本课只讲"测点识别 + 反模式"；如何用 pytest / Postman / Playwright 把测点变成可执行脚本，留到 M1 阶段（第 4 课）。</p>
+  </blockquote>
+
+  <aside class="toc">
+    <h2>目录</h2>
+    <ol>
+      <li><a href="#sec1">一句话回顾（第 1/2 课连接）</a></li>
+      <li><a href="#sec2">七大模块边界（后端源码包 + 测试归属）</a></li>
+      <li><a href="#sec3">鉴权链（Sa-Token）四必测</a></li>
+      <li><a href="#sec4">幂等性三必测（订单 / 支付 / 退款）</a></li>
+      <li><a href="#sec5">分布式锁（Redisson）：秒杀 / 库存并发不超卖</a></li>
+      <li><a href="#sec6">参数校验四必测（Jakarta Validation）</a></li>
+      <li><a href="#sec7">分页边界六必测（MyBatis-Plus PageParam）</a></li>
+      <li><a href="#sec8">反模式警告：不要孤立测"商品列表能不能加载"</a></li>
+      <li><a href="#sec9">测试切入矩阵（模块 × 测试类型）</a></li>
+      <li><a href="#sec10">下一步：测试设计方法论</a></li>
+    </ol>
+  </aside>
+
+  <hr>
+
+  <!-- ============ 第 1 节 ============ -->
+  <h2 id="sec1">1. 一句话回顾（第 1/2 课连接）</h2>
+  <p>第 1 课讲了 mall4j 的七模块 + 两套后端（<code>yami-shop-api</code> :8086 / <code>yami-shop-admin</code> :8085）+ 三套前端（mall4v / mall4m / mall4uni）。</p>
+  <p>第 2 课把"订单生命周期"拆成<strong>资金流 + 信息流 + 物流</strong>三条观察线，配套 6 个状态（UNPAY/PAYED/CONSIGNMENT/CONFIRM/SUCCESS/CLOSE）的状态机迁移表。</p>
+  <p><strong>本课的承诺</strong>：把"测什么"这层抽象落到<strong>七个模块的源码包</strong> + <strong>五个横切关注点的必测点</strong>。掌握这两张图，第 4 课就能直接用 pytest + Knife4j 把测试点变成接口自动化用例。</p>
+
+  <hr>
+
+  <!-- ============ 第 2 节 ============ -->
+  <h2 id="sec2">2. 七大模块边界（后端源码包 + 测试归属）</h2>
+  <p>来源：<code>CONTEXT.md</code> 第 17-28 行 + <code>doc/1-项目概览/3-后端模块说明.md</code>。</p>
+  <p>mall4j 后端是 Maven 多模块工程，<strong>业务归属 ≠ 包路径</strong>：同名业务会在两个后端模块（用户端 + 管理端）各有一个 Controller。测试用例<strong>必须按业务模块</strong>而非物理包来划分。</p>
+
+  <table>
+    <thead>
+      <tr><th>模块</th><th>源码包（用户端）</th><th>源码包（管理端）</th><th>测试归属（写在哪）</th><th>主测试方法</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>商品与 SKU</strong></td><td><code>yami-shop-api/.../prod</code></td><td><code>yami-shop-admin/.../prod</code> + <code>yami-shop-service/.../ProdService</code></td><td>商品查询 / SKU 选择 / 库存扣减</td><td>等价类（库存=0/正常/超量）+ 边界值</td></tr>
+      <tr><td><strong>订单与支付</strong></td><td><code>yami-shop-api/.../order</code> + <code>.../pay</code></td><td><code>yami-shop-admin/.../order</code></td><td>状态机迁移 / 回调幂等 / 退款链路</td><td>状态迁移（每个状态 3 条用例）+ 场景法</td></tr>
+      <tr><td><strong>购物车</strong></td><td><code>yami-shop-api/.../cart</code></td><td>（无）</td><td>加车 / 改数 / 删除 / 优惠叠加</td><td>等价类 + 边界值</td></tr>
+      <tr><td><strong>会员</strong></td><td><code>yami-shop-api/.../member</code></td><td><code>yami-shop-admin/.../user</code></td><td>注册 / 登录 / 地址簿 / 余额</td><td>场景法 + 异常分支</td></tr>
+      <tr><td><strong>权限</strong></td><td>（鉴权拦截所有 API）</td><td><code>yami-shop-security-admin</code> + <code>yami-shop-admin/.../sys</code></td><td>Sa-Token 鉴权 / 角色-菜单-数据权限</td><td>边界值（4 道关卡，见第 3 节）</td></tr>
+      <tr><td><strong>统计</strong></td><td>（无）</td><td><code>yami-shop-admin/.../stat</code></td><td>运营报表聚合查询</td><td>等价类 + 时间窗</td></tr>
+      <tr><td><strong>优惠券 / 营销</strong></td><td><code>yami-shop-api/.../coupon</code></td><td><code>yami-shop-admin/.../coupon</code></td><td>领取 / 使用 / 叠加规则</td><td>场景法（互斥 / 叠加）</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>关键判断</strong>：<strong>接口契约唯一可信源 = <code>yami-shop-api</code> 的 Knife4j</strong>，路径 <code>/doc.html</code>（默认 <code>localhost:8086/doc.html</code>）。管理端的 API 文档通常比用户端滞后，写接口自动化时<strong>优先以用户端为准</strong>做参考。</p>
+  <p><strong>测试归属 = 写在哪</strong>：指 pytest 用例的目录结构。一个业务模块的用例<strong>至少 4 个文件</strong>（test_api_user.py / test_api_admin.py / test_ui.py / test_perf.py），而不是一个文件里堆所有用例。</p>
+  <p><strong>反模式</strong>：按"Controller 数量"来切分测试文件——会出现一个文件 800 行，谁也看不懂。<strong>正确做法</strong>：按业务模块切分，跨模块的横切关注点（鉴权/幂等/分布式锁/参数校验/分页）走独立测试集。</p>
+
+  <hr>
+
+  <!-- ============ 第 3 节 ============ -->
+  <h2 id="sec3">3. 鉴权链（Sa-Token）四必测</h2>
+  <p>来源：<code>doc/4-技术实现/1-权限体系.md</code> + <code>CONTEXT.md</code> 第 31-35 行。</p>
+  <p>mall4j 用 <strong>Sa-Token</strong> 做鉴权，<code>yami-shop-security-admin</code> 是鉴权入口。鉴权链是<strong>所有接口</strong>的前置关卡，每个接口测试都必须先过这四道关：</p>
+
+  <h3>3.1 鉴权四必测</h3>
+  <table>
+    <thead>
+      <tr><th>编号</th><th>场景</th><th>期望</th><th>触发代码入口</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>A1</strong></td><td>不带 token 调任意需要登录的接口</td><td>401 / <code>UNAUTHORIZED</code></td><td>Sa-Token 拦截器 → <code>AuthUtil.getToken()</code> 为空</td></tr>
+      <tr><td><strong>A2</strong></td><td>带过期 token 调接口</td><td>401 / <code>TOKEN_EXPIRED</code></td><td>Sa-Token 拦截器 → <code>Token timeout</code> 异常</td></tr>
+      <tr><td><strong>A3</strong></td><td>普通用户（普通会员角色）访问 admin 接口</td><td>403 / <code>FORBIDDEN</code></td><td><code>@PreAuthorize("@pms.hasPermission(...)")</code> 不匹配</td></tr>
+      <tr><td><strong>A4</strong></td><td>多角色用户登录（如同时拥有"运营 + 客服"）</td><td>按 <code>tz_sys_menu</code> 的 <code>role_id</code> 取并集返回菜单</td><td><code>GET /sys/menu/nav</code> 返回 <code>menuList</code></td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.2 测试归属</h3>
+  <ul>
+    <li><strong>接口自动化</strong>：在 conftest.py 里造 4 个 fixture（<code>no_token</code> / <code>expired_token</code> / <code>user_token</code> / <code>admin_token</code>），每个接口测试至少覆盖 A1+A3 两条。</li>
+    <li><strong>UI 自动化</strong>：用 Playwright 打开 mall4v 登录页，故意输入错误密码 → 期望跳回登录页 + 提示"账号或密码错误"。</li>
+    <li><strong>性能</strong>：1000 并发带过期 token 调接口 → 期望<strong>不被穿透</strong>到 Service 层（验证拦截器在 Filter 链的最前面）。</li>
+  </ul>
+  <p><strong>反模式警告</strong>：只测 A1（不带 token）就声称"鉴权测过了"——A2/A3/A4 才是线上最常爆雷的点。A3（垂直越权）是 OWASP Top 10 之一，A4（菜单越权）会让运营看到不该看的菜单。</p>
+
+  <hr>
+
+  <!-- ============ 第 4 节 ============ -->
+  <h2 id="sec4">4. 幂等性三必测（订单 / 支付 / 退款）</h2>
+  <p>来源：<code>CONTEXT.md</code> 第 37-40 行 + 第 2 课支付幂等三道关。</p>
+  <p>幂等性 = <strong>同一个请求执行 N 次，结果只发生一次</strong>。mall4j 资金流相关的接口<strong>每一个都必须测幂等</strong>，否则线上会出"一单扣两次款"的生产事故。</p>
+
+  <table>
+    <thead>
+      <tr><th>编号</th><th>场景</th><th>期望</th><th>代码入口</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>I1</strong></td><td>同一订单号（orderNumber）重复点"提交订单"</td><td>仅成功一次，第二次返回"订单已存在"或快照已过期</td><td><code>OrderController.submitOrders</code> → <code>ConfirmOrderCache</code> userId 维度 + <code>tz_order</code> 唯一索引</td></tr>
+      <tr><td><strong>I2</strong></td><td>同一支付回调（payNo）多次到达</td><td>仅更新一次订单状态，后续回调幂等返回</td><td><code>PayNoticeController</code>（开源版注释）+ <code>OrderSettlementMapper.updateToPay()</code> 乐观锁 <code>version+1</code></td></tr>
+      <tr><td><strong>I3</strong></td><td>同一退款请求（refundNo）多次提交</td><td>仅退一次，<code>tz_order_refund.return_money_sts</code> 不重复置 1</td><td><code>RefundController.applyRefund</code> → <code>tz_order_refund</code> 唯一索引 + 状态机校验</td></tr>
+    </tbody>
+  </table>
+
+  <h3>测试设计要点</h3>
+  <ul>
+    <li><strong>I1 测试方法</strong>：在用户端调一次 <code>submitOrders</code>，拿到 orderNumber 后<strong>不刷新页面直接重发同一请求</strong> → 期望第二次返回业务错误码（<code>ServerResponseEntity.fail(...)</code>）。</li>
+    <li><strong>I2 测试方法</strong>：用 curl 重放支付回调（带相同 payNo + sign）至少 3 次 → 期望业务表只更新 1 次，资金流日志只写 1 条。</li>
+    <li><strong>I3 测试方法</strong>：用户发起退款，商家在管理端重复点"同意退款" → 期望第三方退款接口只被调 1 次。</li>
+  </ul>
+  <p><strong>反模式</strong>：只测"正常下单一次能成功"——这是单点通过，幂等路径完全没覆盖。</p>
+
+  <hr>
+
+  <!-- ============ 第 5 节 ============ -->
+  <h2 id="sec5">5. 分布式锁（Redisson）：秒杀 / 库存并发不超卖</h2>
+  <p>来源：<code>doc/4-技术实现/7-分布式锁.md</code> + <code>CONTEXT.md</code> 第 42-44 行。</p>
+  <p>mall4j 提供 <code>@RedisLock</code> 注解（基于 Redisson），但<strong>当前业务代码里暂未发现实际使用点</strong>（二开常见位置：库存扣减、重复提交、并发状态流转）。即使开源版没启用，<strong>写测试用例时仍要预留场景</strong>——一旦二开启用，立刻有测试覆盖。</p>
+
+  <h3>5.1 锁机制三要素</h3>
+  <pre><code>Redis key 规则: redisson_lock:{lockName}:{SpEL解析结果}
+默认过期: 5000 ms（防止死锁）
+注解: @RedisLock(lockName = "stock", key = "#prodId")</code></pre>
+
+  <h3>5.2 必测点（性能测试范畴）</h3>
+  <table>
+    <thead>
+      <tr><th>编号</th><th>场景</th><th>期望</th><th>失败模式</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>L1</strong></td><td>同一商品 100 并发扣减库存（库存预置 50）</td><td>最终库存 = -50 之前的 0，成功订单 = 50，<strong>不超卖</strong></td><td>没加锁 → 100 个请求都看到 stock=50 → 超卖 50 个</td></tr>
+      <tr><td><strong>L2</strong></td><td>同一订单号 50 并发提交</td><td>仅成功 1 次，其余返回"重复提交"</td><td>没加锁 → 同一订单被扣 2 次款</td></tr>
+      <tr><td><strong>L3</strong></td><td>锁过期时间边界：业务执行 4.9s（接近 5000ms 默认值）</td><td>锁未失效，第二个请求被阻塞</td><td>锁过早释放 → 第二个请求抢到锁 → 并发问题</td></tr>
+    </tbody>
+  </table>
+
+  <h3>5.3 测试归属</h3>
+  <ul>
+    <li><strong>接口 + 性能组合</strong>：用 Locust 跑 L1，200 并发用户抢购 50 件商品，期望 success=50 / fail=150。</li>
+    <li><strong>接口自动化</strong>：在 conftest.py 里造"加锁前 / 加锁后"两个接口，分别调 → 加锁后的接口应当 <code>ServerResponseEntity</code> 提示"系统繁忙"。</li>
+  </ul>
+  <p><strong>面试金句</strong>：<em>Redis 分布式锁不是银弹，超时时间 + 业务执行时长必须配对；mall4j 默认 5 秒，业务超 5 秒必须显式指定 <code>expire</code>。</em></p>
+
+  <hr>
+
+  <!-- ============ 第 6 节 ============ -->
+  <h2 id="sec6">6. 参数校验四必测（Jakarta Validation）</h2>
+  <p>来源：<code>doc/4-技术实现/3-参数校验.md</code> + <code>CONTEXT.md</code> 第 46-48 行。</p>
+  <p>mall4j 用 Jakarta Validation（<code>@Valid</code> + <code>@NotNull</code> / <code>@NotBlank</code>）做参数校验，校验失败统一进 <code>ServerResponseEntity.fail(...)</code>。<strong>每个接口都至少 4 条参数校验用例</strong>——这是接口自动化的基本盘。</p>
+
+  <table>
+    <thead>
+      <tr><th>编号</th><th>场景</th><th>期望</th><th>示例</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>V1</strong></td><td>必填字段缺失</td><td>4xx + 业务错误码 <code>PARAM_MISSING</code></td><td>提交订单时不传 <code>userAddrId</code></td></tr>
+      <tr><td><strong>V2</strong></td><td>字段类型错误</td><td>4xx + <code>PARAM_TYPE_ERROR</code></td><td><code>price</code> 字段传字符串 <code>"abc"</code></td></tr>
+      <tr><td><strong>V3</strong></td><td>字段长度超限</td><td>4xx + <code>PARAM_LENGTH_OVER</code></td><td>商品名称传 1000 字符（限 200）</td></tr>
+      <tr><td><strong>V4</strong></td><td>枚举值非法</td><td>4xx + <code>PARAM_INVALID</code></td><td>订单状态传 <code>status=99</code>（仅 1-6 合法）</td></tr>
+    </tbody>
+  </table>
+
+  <h3>测试设计要点</h3>
+  <ul>
+    <li><strong>每个字段一条用例</strong>：不要写"参数错误"一条用例覆盖所有字段——<strong>字段粒度</strong>才是接口测试的有效覆盖率。</li>
+    <li><strong>边界值优先</strong>：必填字段 → 缺失/空串/<code>null</code>/空格 各算一条；长度字段 → min-1 / min / max / max+1。</li>
+    <li><strong>错误信息校验</strong>：返回的 <code>msg</code> 字段必须包含"哪个字段错了"，不能只返回"参数错误"——否则前端没法定位。</li>
+  </ul>
+  <p><strong>反模式</strong>：在前端做校验就以为后端不用管——<strong>前端校验可绕过</strong>（curl / Postman / 自动化脚本），后端 <code>@Valid</code> 才是最后一道防线。</p>
+
+  <hr>
+
+  <!-- ============ 第 7 节 ============ -->
+  <h2 id="sec7">7. 分页边界六必测（MyBatis-Plus PageParam）</h2>
+  <p>来源：<code>doc/4-技术实现/4-分页实现.md</code> + <code>CONTEXT.md</code> 第 50-52 行。</p>
+  <p>mall4j 分页基于 MyBatis-Plus <code>PageParam&lt;T&gt;</code>，默认 <code>current=1 / size=10</code>，<code>size</code> 最大限制 = 100。<strong>所有分页接口都至少 6 条边界用例</strong>：</p>
+
+  <table>
+    <thead>
+      <tr><th>编号</th><th>入参</th><th>期望</th><th>验证点</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>P1</strong></td><td><code>current=0</code></td><td>兜底为 1 或返回 400</td><td>MyBatis-Plus 是否 <code>current &lt; 1</code> 自动修正</td></tr>
+      <tr><td><strong>P2</strong></td><td><code>current=-1</code></td><td>返回 400（非法参数）</td><td>Jakarta Validation <code>@Min(1)</code> 是否生效</td></tr>
+      <tr><td><strong>P3</strong></td><td><code>size=0</code></td><td>兜底为 10 或返回 400</td><td>默认值兜底逻辑</td></tr>
+      <tr><td><strong>P4</strong></td><td><code>size=99999</code></td><td>兜底为 100 或返回 400</td><td><code>size &gt; 100</code> 截断逻辑</td></tr>
+      <tr><td><strong>P5</strong></td><td>总记录数 = 0</td><td>返回空列表 + <code>total=0</code></td><td>空数据路径</td></tr>
+      <tr><td><strong>P6</strong></td><td>总记录数 = 1</td><td><code>total=1</code> + <code>records.length=1</code> + 分页器显示 1 页</td><td>单数据路径</td></tr>
+    </tbody>
+  </table>
+
+  <h3>复杂关联分页陷阱</h3>
+  <p>订单明细分页（<code>OrderServiceImpl.pageOrdersDetailByOrderParam()</code>）是<strong>手写 SQL</strong> + 单独 count SQL，因为 join 后行数 ≠ 订单数。测试时必须验证：</p>
+  <ul>
+    <li><code>total</code> 是否等于<strong>订单数</strong>而非<strong>订单项数</strong>。</li>
+    <li><code>records</code> 的 <code>size</code> 是否等于当页订单项数（可能 &gt; <code>PageParam.size</code>，因为一个订单多行）。</li>
+  </ul>
+  <p><strong>反模式</strong>：只测 <code>current=1&amp;size=10</code>（默认参数）就声称"分页测过了"——线上 P1-P4 一旦有 Bug 就是 P0 事故。</p>
+
+  <hr>
+
+  <!-- ============ 第 8 节 ============ -->
+  <h2 id="sec8">8. 反模式警告：不要孤立测"商品列表能不能加载"</h2>
+  <p>来源：<code>CONTEXT.md</code> 第 15 行（CONTEXT.md 第 1 节"三流合一"的最后一句）。</p>
+  <p><code>mall4j</code> 业务要测"流"，不要测"点"——任何孤立用例都是反模式。</p>
+
+  <h3>典型反模式清单</h3>
+  <table>
+    <thead>
+      <tr><th>反模式</th><th>为什么错</th><th>正确做法</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>"商品列表能加载"</td><td>单点通过，订单全流程可能挂</td><td>加载 → 加购 → 下单 → 支付 全链路</td></tr>
+      <tr><td>"登录接口返回 200"</td><td>只验状态码，没验 token 有效性</td><td>登录 → 拿 token → 调 <code>/sys/menu/nav</code> 验 token 真能用</td></tr>
+      <tr><td>"支付回调能调通"</td><td>没验幂等，没验金额来源</td><td>回调 → 验签 → 幂等 → DB 更新 → 二次回调幂等返回</td></tr>
+      <tr><td>"退款能成功"</td><td>没验原路返回（微信单退到支付宝）</td><td>退款 → 查 <code>tz_order.pay_type</code> → 验退款渠道匹配</td></tr>
+    </tbody>
+  </table>
+
+  <p><strong>判断标准</strong>：这条用例单独跑通 ≠ 业务能跑通。<strong>必须把"点"串成"流"</strong>才能进用例库。</p>
+
+  <h3>反例：商品列表孤立测</h3>
+  <pre><code>def test_product_list_loads():
+    r = requests.get(f"{BASE}/prod/page?current=1&amp;size=10")
+    assert r.status_code == 200   # ✓ 但业务完全没验证</code></pre>
+
+  <h3>正例：商品 → 加购 → 下单 全链路</h3>
+  <pre><code>def test_browse_to_submit_order():
+    # 商品列表
+    products = api.list_prod_page(current=1, size=10)
+    # 加购
+    api.add_to_cart(prod_id=products[0]["prodId"], sku_id=products[0]["skuList"][0]["skuId"], count=1)
+    # 确认订单
+    confirm = api.confirm_order(cart_items=...)
+    # 提交订单
+    order = api.submit_orders(addr_id=..., order_items=confirm["orderItems"])
+    assert order["status"] == 1  # UNPAY
+    assert order["payAmount"] == products[0]["price"] * 1</code></pre>
+
+  <hr>
+
+  <!-- ============ 第 9 节 ============ -->
+  <h2 id="sec9">9. 测试切入矩阵（模块 × 测试类型）</h2>
+  <p>这是本课的"具体可验证的 win"——把这张表打印贴墙上，每个模块新增功能时按这个矩阵逐项打钩：</p>
+
+  <table>
+    <thead>
+      <tr><th>模块 \ 测试类型</th><th>功能</th><th>接口</th><th>UI</th><th>性能</th><th>异常</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>商品与 SKU</strong></td><td>商品 CRUD + 上下架</td><td><code>/prod/page</code> / <code>/prod/info/{id}</code></td><td>列表页 + 详情页</td><td>1000 并发浏览</td><td>库存=0 / SKU 失效 / 商品下架</td></tr>
+      <tr><td><strong>订单与支付</strong></td><td>下单/支付/退款/取消</td><td><code>/order/submit</code> / <code>/pay/normalPay</code> / <code>/refund/apply</code></td><td>用户中心 + 商家后台</td><td>200 并发下单（幂等）</td><td>重复下单 / 回调重放 / 支付超时</td></tr>
+      <tr><td><strong>购物车</strong></td><td>加车/改数/删除</td><td><code>/cart/add</code> / <code>/cart/update</code> / <code>/cart/delete</code></td><td>购物车页</td><td>100 并发改数</td><td>库存不足 / 商品失效</td></tr>
+      <tr><td><strong>会员</strong></td><td>注册/登录/地址</td><td><code>/register</code> / <code>/login</code> / <code>/addr/list</code></td><td>个人中心</td><td>500 并发登录</td><td>重复注册 / 错误密码 / token 过期</td></tr>
+      <tr><td><strong>权限</strong></td><td>角色/菜单/数据</td><td><code>/sys/menu/nav</code> / <code>/sys/role/page</code></td><td>管理后台登录</td><td>1000 并发带过期 token</td><td>越权 / 菜单缺失 / 按钮不可见</td></tr>
+      <tr><td><strong>统计</strong></td><td>报表聚合</td><td><code>/stat/order</code> / <code>/stat/prod</code></td><td>运营报表页</td><td>大数据量聚合</td><td>时间窗越界 / 空数据</td></tr>
+      <tr><td><strong>优惠券</strong></td><td>领取/使用/叠加</td><td><code>/coupon/receive</code> / <code>/coupon/use</code></td><td>领券中心</td><td>100 并发抢券</td><td>券已领完 / 互斥规则</td></tr>
+    </tbody>
+  </table>
+
+  <h3>矩阵用法</h3>
+  <ol>
+    <li>每个模块新功能上线前，至少把功能 + 接口 + 异常 三列打钩。</li>
+    <li>UI 自动化优先覆盖"用户高频路径"（商品 → 下单 → 支付），不要为管理后台每个页面都写 UI 用例（ROI 太低）。</li>
+    <li>性能测试只跑<strong>资金流相关</strong>接口（下单 / 支付 / 退款），其余模块用接口冒烟即可。</li>
+  </ol>
+
+  <hr>
+
+  <!-- ============ 第 10 节 ============ -->
+  <h2 id="sec10">10. 下一步：测试设计方法论</h2>
+  <p>本课建立了"模块边界 + 横切关注点必测点 + 反模式 + 矩阵"的心智模型。第 4 课将进入：</p>
+  <ul>
+    <li><strong>等价类 / 边界值 / 场景法 / 状态迁移 / 判定表 / 配对测试</strong> 六种用例设计方法的 mall4j 实战对应。</li>
+    <li><strong>测试金字塔在 mall4j 的落位</strong>：接口测试（最多）+ UI 测试（关键路径）+ 单元测试（Service 层）+ 性能测试（资金流）。</li>
+    <li><strong>第一份 pytest 用例集</strong>：登录 → 加购 → 下单 → 支付，把第 3 课的矩阵第 1-2 行变成可执行脚本。</li>
+  </ul>
+  <p><strong>本课 win 验证</strong>：你能在 5 分钟内画完第 9 节"测试切入矩阵"的 7 行表格，并说出每行至少 1 个必测点——这就是 MISSION.md 里的"从每个模块里独立挑出 ≥ 3 个可测点"的素材。</p>
+  <p><strong>预习</strong>（可选）：读 <code>doc/4-技术实现/3-参数校验.md</code> + <code>doc/4-技术实现/4-分页实现.md</code>，带着"每个接口的 4+6 条必测用例怎么落到 pytest"的疑问进第 4 课。</p>
+
+  <blockquote>
+    <p><strong>提醒</strong>：学完本课后，请把你对<em>测试金字塔</em>、<em>字段粒度用例</em>、<em>Redisson 超时时间与业务时长配对</em>这些点的不理解之处，向 AI 教师追问——例如："为什么 A3 垂直越权比 A1 不带 token 更值得测？字段粒度用例 vs 一条'参数错误'用例的覆盖率差距怎么量化？"。</p>
+  </blockquote>
+
+  <hr>
+
+  <!-- ============ 课堂小测（quiz 卡片） ============ -->
+  <h2>课堂小测</h2>
+  <p>用 3 道单选把本课的 5 个横切关注点串起来——做完看底部反馈。</p>
+
+  <form class="quiz" data-qid="q1">
+    <div class="q-title"><span class="qno">Q1.</span>mall4j 鉴权链（Sa-Token）四必测中，最容易被遗漏且属于 OWASP Top 10 的场景是？</div>
+    <ul class="quiz-opts">
+      <li class="quiz-opt"><label><input type="radio" name="q1" value="0"> A) 不带 token 调任意需要登录接口验证 401</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q1" value="1"> B) 带过期 token 调任意需要登录接口验证 401</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q1" value="2"> C) 普通用户访问 admin 后台接口验证 403 垂直越权</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q1" value="3"> D) 多角色用户登录后按角色过滤菜单并集返回</label></li>
+    </ul>
+    <div class="quiz-actions">
+      <button type="button" data-act="check">提交</button>
+    </div>
+    <div class="quiz-feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2">
+    <div class="q-title"><span class="qno">Q2.</span>同一支付回调（payNo）多次到达时，mall4j 资金流的幂等保证主要靠什么机制实现？</div>
+    <ul class="quiz-opts">
+      <li class="quiz-opt"><label><input type="radio" name="q2" value="0"> A) Sa-Token 拦截器拦截重复 token 请求进入业务逻辑</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q2" value="1"> B) Redis 分布式锁对 payNo 加锁保证回调串行执行</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q2" value="2"> C) tz_order_settlement 乐观锁 version 自增保证幂等</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q2" value="3"> D) 前端按钮防抖拦截用户重复点击触发多次回调</label></li>
+    </ul>
+    <div class="quiz-actions">
+      <button type="button" data-act="check">提交</button>
+    </div>
+    <div class="quiz-feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3">
+    <div class="q-title"><span class="qno">Q3.</span>下列哪种用例属于"孤立测点"反模式，按本课标准不应进用例库？</div>
+    <ul class="quiz-opts">
+      <li class="quiz-opt"><label><input type="radio" name="q3" value="0"> A) 商品列表 → 加购 → 确认订单 → 支付 全链路冒烟用例</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q3" value="1"> B) 登录 → 拿 token → 调 /sys/menu/nav 验证菜单返回完整流程</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q3" value="2"> C) 单独验证商品列表 GET /prod/page 接口返回 200 状态码</label></li>
+      <li class="quiz-opt"><label><input type="radio" name="q3" value="3"> D) 退款申请 → 查询 pay_type 字段 → 验证原路返回规则</label></li>
+    </ul>
+    <div class="quiz-actions">
+      <button type="button" data-act="check">提交</button>
+    </div>
+    <div class="quiz-feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0002-three-flows-and-order-state-machine.html">第 2 课 三流合一与订单状态机</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0004-test-design-methods.html">第 4 课 测试设计方法论</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0003-test-points-cheatsheet.html">模块边界与可测点速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0003-test-points-cheatsheet.html">模块边界与可测点速查卡（reference/0003-test-points-cheatsheet.html）</a></li>
+      <li><a href="../../doc/1-项目概览/3-后端模块说明.md">doc/1-项目概览/3-后端模块说明.md</a></li>
+      <li><a href="../../doc/4-技术实现/1-权限体系.md">doc/4-技术实现/1-权限体系.md</a></li>
+      <li><a href="../../doc/4-技术实现/3-参数校验.md">doc/4-技术实现/3-参数校验.md</a></li>
+    </ul>
+    <div>第 3 课到这里就完成了，去第 4 课把 6 种用例设计方法学会。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=C(2), Q2=C(2), Q3=C(2) ===
+  var correctMap = { q1: '2', q2: '2', q3: '2' };
+
+  var chapterHint = {
+    q1: { href: '#sec3', text: '回到第 3 节：再读"鉴权四必测"的 A3 垂直越权' },
+    q2: { href: '#sec4', text: '回到第 4 节：再读"幂等性三必测"的 I2 支付回调' },
+    q3: { href: '#sec8', text: '回到第 8 节：再读"反模式警告"商品列表孤立测' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

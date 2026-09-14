@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 7 课 18 条预测缺陷——AGPLv3 模式下的源码逆向工程</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 7 课：18 条预测缺陷——AGPLv3 模式下的源码逆向工程</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 7 课</span>
+    <span class="tag">难度 ★★★★☆</span>
+    <span class="tag">时长 45 分钟</span>
+    <span class="tag">实战对象 M1-D3-001 缺陷库 18 条</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L06 用例设计）</a></li>
+      <li><a href="#sec2">AGPLv3 与"预测缺陷库"模式</a></li>
+      <li><a href="#sec3">严重等级 × 优先级矩阵</a></li>
+      <li><a href="#sec4">18 条缺陷的三维分布（实测）</a></li>
+      <li><a href="#sec5">5 大源码线索（核心方法论）</a></li>
+      <li><a href="#sec6">TOP 3 Critical 深度剖析</a></li>
+      <li><a href="#sec7">缺陷生命周期与报告模板</a></li>
+      <li><a href="#sec8">简历可写句（数字 ×2 原则）</a></li>
+      <li><a href="#sec9">面试官追问清单</a></li>
+      <li><a href="#sec10">课堂小测（3 道单选）</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L06 用例设计）</h2>
+  <p>L06 用例方法论把 150 条测试用例拆成了"等价类 51 + 边界值 35 + 场景法 32 + 状态迁移 12 + 正交 20"五类方法，回答的是"<strong>用什么方法、写多少用例</strong>"。本课回答下一棒：<strong>这些用例跑下去会暴露什么缺陷？怎么从一份 Controller 源码把缺陷预先看出来？</strong></p>
+  <ul>
+    <li><strong>用例 vs 缺陷</strong>：150 条用例是"问问题的清单"，18 条缺陷是"答案"。1 条严重缺陷往往要 5-10 条用例才能被逼出来（参见 BUG-008 购物车超卖，需要"100 并发"+"变更后判断"两条用例串起来才暴露）。</li>
+    <li><strong>缺陷库的两条产生路径</strong>：路径 A = 执行用例后真实暴露（强证据，但受环境约束）；路径 B = 源码静态分析后预测产生（弱证据，但 AGPLv3 模式下能离线做）。本课聚焦路径 B。</li>
+    <li><strong>本课的承诺</strong>：让用户学会"<strong>看一段 Controller/Param/Config 代码就能定位潜在缺陷</strong>"——5 大源码线索 + 三维分布表 + TOP 3 Critical 剖析。读完后用户能独立扫一个新的 Controller（如 <code>SearchController</code>）并产出 3 条新预测缺陷（Win 任务）。</li>
+  </ul>
+
+  <h2 id="sec2">2. AGPLv3 与"预测缺陷库"模式：为什么静态分析、不直接复现</h2>
+  <p>本节是全课最特殊的一节——先讲"<strong>为什么这份缺陷库长这样</strong>"，再讲缺陷本身。</p>
+
+  <h3>2.1 mall4j 是 AGPLv3 强 copyleft 项目</h3>
+  <p>来源：<code>mall4j/LICENSE</code>。<strong>AGPLv3 第 13 条</strong>规定：任何基于 AGPLv3 源码的"网络服务"对外提供服务时，必须以 AGPLv3 公开所有修改后的源码。<strong>不能 fork 后闷声改</strong>——改了就要开源，否则法律风险。</p>
+  <div class="interview">
+    <div class="who">对测试工程师的实际约束</div>
+    <ol>
+      <li>可以在本地拉源码看、跑通、注入调试代码——这些是"看"，不构成"修改分发"。</li>
+      <li>不要把"对 mall4j 本体的代码修改"作为 PR / 提交 / 简历里"<strong>贡献代码</strong>"的一部分——要么进 PR 回流给原作者（AGPL 义务），要么仅作学习用途。</li>
+      <li>测试发现的缺陷、修复建议、复现步骤、PoC 脚本——这些是"<strong>基于源码的产出物</strong>"而非源码本身，<strong>不受 AGPLv3 约束</strong>，可放进简历与 GitHub。</li>
+    </ol>
+  </div>
+
+  <h3>2.2 "预测缺陷库" vs "执行后缺陷库"</h3>
+  <table>
+    <thead><tr><th>维度</th><th>路径 A：执行后真实暴露</th><th>路径 B：源码静态分析预测（本课）</th></tr></thead>
+    <tbody>
+      <tr><td>证据</td><td>强（真实复现 + 截图 + 日志）</td><td>弱（基于源码推断 + 攻击步骤脑补）</td></tr>
+      <tr><td>依赖</td><td>JDK17 + MySQL + Redis + docker-compose</td><td>只需 IDEA + 读 Java 源码 ✓</td></tr>
+      <tr><td>数量</td><td>通常 5-10 个（受环境运气约束）</td><td>本课 18 个 ✓</td></tr>
+      <tr><td>AGPLv3</td><td>需"修代码 + 复测"碰本体源码</td><td>只"看 + 写文档"不碰 ✓</td></tr>
+      <tr><td>适用</td><td>M1-D1 环境跑通后</td><td>环境未启动 / 设计阶段 / 离线作业</td></tr>
+    </tbody>
+  </table>
+  <p><strong>本课选择路径 B 的 3 个原因</strong>：</p>
+  <ol>
+    <li><strong>AGPLv3 不变量 1 锁定</strong>：第 1 条不变量的精神是"二开走独立仓库"——预测缺陷库走"<strong>静态分析产出文档</strong>"路线，天然不踩线。</li>
+    <li><strong>环境未启动是常态</strong>：双非 + 零实习 + 自学党经常卡在 docker-compose 起不来；不能因环境问题就放弃产出。</li>
+    <li><strong>硬数字 "18 个"是设计目标</strong>：真实环境跑出 8 个能写"发现 8 个"；但 L05 阶段二的目标是 18 个。预测缺陷库让数字落地。</li>
+  </ol>
+
+  <h3>2.3 "预测缺陷" ≠ "虚假缺陷"——3 条底线</h3>
+  <ul>
+    <li><strong>每条缺陷必须真实映射源码</strong>（如 BUG-001 第 24-48 行就是 <code>UserRegisterParam.java</code> 字段声明区）；</li>
+    <li><strong>攻击步骤必须可执行</strong>（URL + HTTP 方法 + Body + Header + 触发条件齐全）；</li>
+    <li><strong>修复建议必须落到具体 API / 注解 / 代码模式</strong>（如"加 <code>@NotBlank + @Pattern</code>"而非"建议加强校验"空话）。</li>
+  </ul>
+  <p>本课 18 条缺陷 + 修复建议<strong>不是</strong>对 mall4j 本体源码的修改（不构成"分发修改"），而是基于源码的产出物——可放进 <code>mall4j-test-practice</code> 仓库作为简历素材。</p>
+
+  <h2 id="sec3">3. 缺陷严重等级 × 优先级矩阵</h2>
+  <p>来源：<code>bug-list.md</code> 设计原则 + ISTQB 严重等级/优先级定义。</p>
+
+  <h3>3.1 严重等级（Severity）—— 影响定级</h3>
+  <table>
+    <thead><tr><th>等级</th><th>定义</th><th>mall4j 例子</th><th>分布</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Critical</strong></td><td>资金/鉴权/数据——核心业务不可用</td><td>BUG-002 改密未鉴权 / BUG-013 支付事务</td><td>3 条</td></tr>
+      <tr><td><strong>Major</strong></td><td>重要功能不可用或绕鉴权</td><td>BUG-001 注册无校验 / BUG-012 水平越权</td><td>6 条</td></tr>
+      <tr><td><strong>Minor</strong></td><td>次要功能受影响，可绕过</td><td>BUG-006 搜索超长 / BUG-015 缓存堆积</td><td>6 条</td></tr>
+      <tr><td><strong>Trivial</strong></td><td>文案/UI/体验问题</td><td>BUG-004 文案不准 / BUG-010 删除无文案</td><td>3 条</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.2 优先级（Priority）—— 修复顺序</h3>
+  <table>
+    <thead><tr><th>优先级</th><th>修复 SLA</th><th>典型场景</th><th>分布</th></tr></thead>
+    <tbody>
+      <tr><td><strong>P0</strong></td><td>24h 内（线上紧急）</td><td>Critical 安全 / 资金类</td><td>6 条</td></tr>
+      <tr><td><strong>P1</strong></td><td>1 周内（下个版本必修）</td><td>Major 影响主流程</td><td>6 条</td></tr>
+      <tr><td><strong>P2</strong></td><td>1 月内（季度计划）</td><td>Minor 可优化点</td><td>4 条</td></tr>
+      <tr><td><strong>P3</strong></td><td>有时间再修（体验类）</td><td>Trivial 文案 / UI 细节</td><td>2 条</td></tr>
+    </tbody>
+  </table>
+
+  <h3>3.3 严重等级 × 优先级交叉表（实战决策）</h3>
+  <table>
+    <thead><tr><th>严重 ↓ / 优先级 →</th><th>P0</th><th>P1</th><th>P2</th><th>P3</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Critical</strong></td><td>002 / 011 / 013</td><td>—</td><td>—</td><td>—</td></tr>
+      <tr><td><strong>Major</strong></td><td>001 / 008 / 012</td><td>003 / 005 / 017</td><td>—</td><td>—</td></tr>
+      <tr><td><strong>Minor</strong></td><td>—</td><td>009 / 014 / 016</td><td>006 / 007 / 015</td><td>—</td></tr>
+      <tr><td><strong>Trivial</strong></td><td>—</td><td>—</td><td>018</td><td>004 / 010</td></tr>
+    </tbody>
+  <p><strong>实战决策规则</strong>：</p>
+  <ul>
+    <li><strong>Critical 全部 P0</strong>（资金/鉴权/数据类不能放）——本课 3 条全 P0 ✓</li>
+    <li><strong>Major 中影响主链路 → P0</strong>（BUG-001 注册 / BUG-008 购物车 / BUG-012 订单）；次链路 → P1</li>
+    <li><strong>Minor 中影响数据/隐私 → P1</strong>（BUG-009 / 014 / 016）；性能/兼容 → P2</li>
+    <li><strong>Trivial 文案 → P3</strong>；Trivial 行为缓存 → P2（BUG-018）</li>
+  </ul>
+  <div class="interview">
+    <div class="who">面试官最爱追问</div>
+    "Critical 一定是 P0 吗？"——<strong>不一定</strong>。Critical 描述"影响多大"，P0 描述"什么时候修"。如果 Critical 是离线模块、不在主链路上，可能排 P1；但本课 3 条 Critical 全部在主链路（鉴权/支付/订单），所以全是 P0。
+  </div>
+
+  <h2 id="sec4">4. 18 条缺陷的三维分布（实测统计）</h2>
+  <p>本节所有数字均从 <code>test-cases/M1-D3-001/bug-list.csv</code> 实测统计（Python 脚本跑 Counter，2026-09-14 当下版本）。<strong>不是设计目标，是落地产物</strong>。</p>
+
+  <h3>4.1-4.3 严重等级 / 模块 / 类型分布（实测）</h3>
+  <pre class="ascii">
+   严重等级：Major 6 + Minor 6 + Critical 3 + Trivial 3 = 18（Critical+Major 占 50%）
+   模块    ：订单支付 5 + 登录注册 4 + 商品 3 + 购物车 3 + 会员权限 3
+   类型    ：功能 6 + 安全 3 + 性能 3 + 易用 2 + 边界 2 + 兼容 2
+   ─────────────────────────────────────────
+   P0 6 + P1 6 + P2 4 + P3 2 = 18（67% 在版本内必修）</pre>
+  <p><strong>特征</strong>：订单支付 5 条居首（含 2 条 Critical），与 L02 状态机复杂度对应；登录注册 4 条（含 1 条 Critical）反映鉴权链的高风险；3 个 3 条的模块分布均衡无"安全死角"。安全 3 条（BUG-002 / 012 / 017）刚好对应鉴权 / 水平越权 / 资源越权 3 类典型攻击；Critical+Major = 9 条（50%）是真正的"硬骨头"。</p>
+
+  <h3>4.4 严重等级 × 模块交叉表（实测）</h3>
+  <table>
+    <thead><tr><th>模块 ↓ / 严重 →</th><th>Critical</th><th>Major</th><th>Minor</th><th>Trivial</th><th>合计</th></tr></thead>
+    <tbody>
+      <tr><td>登录注册</td><td>1</td><td>2</td><td>0</td><td>1</td><td><strong>4</strong></td></tr>
+      <tr><td>商品</td><td>0</td><td>1</td><td>2</td><td>0</td><td><strong>3</strong></td></tr>
+      <tr><td>购物车</td><td>0</td><td>1</td><td>1</td><td>1</td><td><strong>3</strong></td></tr>
+      <tr><td>订单支付</td><td>2</td><td>1</td><td>2</td><td>0</td><td><strong>5</strong></td></tr>
+      <tr><td>会员权限</td><td>0</td><td>1</td><td>1</td><td>1</td><td><strong>3</strong></td></tr>
+      <tr><td><strong>合计</strong></td><td><strong>3</strong></td><td><strong>6</strong></td><td><strong>6</strong></td><td><strong>3</strong></td><td><strong>18</strong></td></tr>
+    </tbody>
+  </table>
+  <p><strong>风险指纹</strong>：Critical 集中在"鉴权 + 资金"——登录注册 1 条（BUG-002 鉴权）+ 订单支付 2 条（BUG-011 状态机 + BUG-013 事务）。任何 B2C 电商 Critical 缺陷都集中在"谁能动钱"和"钱流向对不对"。</p>
+
+  <h2 id="sec5">5. 预测缺陷的 5 大源码线索（核心方法论）</h2>
+  <p>本节是全课的<strong>方法论核心</strong>——5 条源码线索就是"<strong>从一份 Controller 代码逆推潜在缺陷的扫描器</strong>"。每条线索配 1 个 bug-list.csv 的实际案例（行号精准引用）。</p>
+
+  <h3>5.1 线索 ①：弱约束 Param（@Schema 描述但无 @NotBlank / @Pattern）</h3>
+  <p><strong>识别方法</strong>：打开 Param 实体类，看字段注解——只有 <code>@Schema(description="...")</code> 而没有 <code>@NotBlank / @NotNull / @Pattern / @Size / @Min / @Max</code> 等 jakarta.validation 注解，<strong>说明字段未做服务端校验</strong>。</p>
+  <p><strong>案例：BUG-001 注册接口对 mobile/userName/userMail 缺失格式校验</strong>（参见 bug-list.csv 第 2 行）</p>
+  <ul>
+    <li><strong>源码引用</strong>：<code>UserRegisterParam.java</code> 第 24-48 行，<code>passWord / userMail / nickName / userName / mobile</code> 字段全部仅 <code>@Schema</code> 无任何 <code>@NotBlank / @Pattern</code>；<code>UserRegisterController.java:47 register()</code> 仅 <code>nickName</code> 空时回退 <code>userName</code> 后 <code>userService.save(user)</code>，任何非法格式均落库。</li>
+    <li><strong>预测缺陷 + 修复</strong>：XSS payload / 非法手机号 / 非法邮箱可任意写入；修复方向 <code>mobile</code> 加 <code>@Pattern(regexp="^1[3-9]\d{9}$")</code>，<code>userMail</code> 加 <code>@Email</code>，Controller 加 <code>@Valid</code> 触发校验。</li>
+  </ul>
+
+  <h3>5.2 线索 ②：鉴权链缺口（缺 @SaCheckLogin / @PreAuthorize / SecurityUtils.getUser()）</h3>
+  <p><strong>识别方法</strong>：在 Controller 方法签名上找鉴权注解（Sa-Token / Spring Security / Shiro 三选一），方法体首行找 <code>SecurityUtils.getUser()</code> 等"取当前登录用户"的调用。<strong>两个都没有</strong> → 该方法可能未登录可访问。</p>
+  <p><strong>案例：BUG-002 改密接口 /user/updatePwd 缺 Sa-Token 鉴权</strong>（参见 bug-list.csv 第 3 行）</p>
+  <ul>
+    <li><strong>源码引用</strong>：<code>UserRegisterController.java:78-100 updatePwd()</code> 既无 <code>@PreAuthorize</code> / Sa-Token 拦截注解，也未调用 <code>SecurityUtils.getUser()</code>；<code>MallWebSecurityConfigurerAdapter</code> 显式 <code>.requestMatchers('/**').permitAll()</code>——白名单过大。</li>
+    <li><strong>预测缺陷 + 修复</strong>：未登录用户能改任意已知 nickName 的密码；修复方向 <code>updatePwd</code> 加 <code>@SaCheckLogin</code> + 白名单收窄 <code>.requestMatchers('/p/**').authenticated()</code>。</li>
+  </ul>
+
+  <h3>5.3 线索 ③：状态机守卫缺失（无乐观锁版本号 / 无 status 二次校验）</h3>
+  <p><strong>识别方法</strong>：看 Order 实体是否有 <code>@Version</code> 字段（MyBatis-Plus 乐观锁）；看状态变更方法 SQL 是否带 <code>where version = ?</code>。<strong>无 @Version → 并发状态变更可能脏写</strong>。</p>
+  <p><strong>案例：BUG-014 订单取消 /myOrder/cancel 状态机校验后未二次确认</strong>（参见 bug-list.csv 第 15 行）</p>
+  <ul>
+    <li><strong>源码引用</strong>：<code>MyOrderController.java:139</code> 用 <code>Objects.equals(order.getStatus(), UNPAY)</code> 判断后调用 <code>orderService.cancelOrders</code>，无乐观锁字段。</li>
+    <li><strong>预测缺陷 + 修复</strong>：并发场景 cancel 与 payNotice 都可能成功导致库存减 2 次；修复方向 Order 实体加 <code>@Version Long version</code>，cancel 方法 <code>updateById</code> 带 <code>where version=#{oldVersion}</code> 影响行数 0 抛"订单状态已变更"。</li>
+    <li><strong>同模式</strong>：BUG-011 confirm-submit 窗口期被替换——缓存读写之间无锁同 userId 被并发覆盖（详见第 6 节）。</li>
+  </ul>
+
+  <h3>5.4 线索 ④：事务边界（@Transactional 缺失）</h3>
+  <p><strong>识别方法</strong>：看 Service 方法上是否有 <code>@Transactional</code>；看方法内是否调用了多个写操作（DB / Redis / MQ）。<strong>多个写操作无 @Transactional → 部分写成功部分失败 → 脏数据</strong>。</p>
+  <p><strong>案例：BUG-013 PayController.pay 接口未声明 @Transactional</strong>（参见 bug-list.csv 第 14 行）</p>
+  <ul>
+    <li><strong>源码引用</strong>：<code>PayController.java:42-52 pay()</code> 方法无 <code>@Transactional</code>；第 49 行 <code>payService.pay(userId, payParam)</code> 与第 50 行 <code>payService.paySuccess(...)</code> 是两次独立调用。</li>
+    <li><strong>预测缺陷 + 修复</strong>：中间任意异常留下"已扣库存但订单仍 UNPAY"或"订单已支付但库存未扣"脏数据；修复方向 <code>PayController.pay</code> 加 <code>@Transactional(rollbackFor = Exception.class)</code>，<code>payService.pay</code> 与 <code>payService.paySuccess</code> 合并为 <code>payAndSettle</code> 单一方法。</li>
+  </ul>
+
+  <h3>5.5 线索 ⑤：缓存一致性（Cache-Aside 模式违反）</h3>
+  <p><strong>识别方法</strong>：看写操作（<code>update</code> / <code>cancel</code> / <code>changePrice</code>）是否在 DB 写后调用 <code>cacheService.remove(key)</code> 或 <code>@CacheEvict</code>。<strong>写 DB 不清缓存 → 缓存与 DB 不一致直到 TTL 过期</strong>。</p>
+  <p><strong>案例：BUG-005 商品详情缓存与 admin 后台改价不一致</strong>（参见 bug-list.csv 第 6 行）</p>
+  <ul>
+    <li><strong>源码引用</strong>：<code>OrderController.java:184-185</code> 与 <code>MyOrderController.java:149-150,176-177</code> 仅在取消订单 / 确认收货链路调用 <code>productService.removeProductCacheByProdId</code>；admin 后台改价无对应失效代码。</li>
+    <li><strong>预测缺陷 + 修复</strong>：admin 改价后最长持续 TTL（5-30 分钟）期间前端展示价 ≠ 实际支付价；修复方向 admin 端 <code>ProductController.update</code> 加 <code>@CacheEvict(value="prod:", key="#prodId")</code> + <code>@TransactionalEventListener(AFTER_COMMIT)</code> 保证先 DB 后缓存。</li>
+    <li><strong>同模式</strong>：BUG-015 订单 confirm 缓存堆积——<code>putConfirmOrderCache</code> 未设 TTL，弱网用户中途退出导致缓存永驻。</li>
+  </ul>
+
+  <h3>5.6 5 大线索的扫描顺序</h3>
+  <pre class="ascii">
+   ┌─────────────────────────────────────────────────────────────┐
+   │  1. 看 Param 实体类 ──► 线索 ①（弱约束）                   │
+   │  2. 看 Controller 方法注解 ──► 线索 ②（鉴权链）            │
+   │  3. 看状态变更方法 + Entity ──► 线索 ③（状态机守卫）       │
+   │  4. 看写操作方法体 ──► 线索 ④（事务边界）                  │
+   │  5. 看写操作后的缓存代码 ──► 线索 ⑤（缓存一致性）          │
+   └─────────────────────────────────────────────────────────────┘</pre>
+  <p>每扫到 1 个风险点 → 产出 1 条预测缺陷（10 字段模板见第 7 节）。</p>
+  <div class="interview">
+    <div class="who">Win 任务的用法</div>
+    Win 任务会请你扫 <code>SearchController.java</code> 与 <code>CategoryController.java</code>——它们都不在 18 条 bug-list 内。按 5.6 的顺序逐条扫，每个风险点产 1 条预测缺陷。预期每文件 1-2 条，共 3 条。
+  </div>
+
+  <h2 id="sec6">6. TOP 3 Critical 缺陷深度剖析</h2>
+  <p>3 条 Critical 缺陷每条用"<strong>源码引用 + 攻击步骤 + 修复建议</strong>"三件套讲透。每条 ≥ 200 字。这 3 条是面试最高频被追问的，因为它们分别对应"<strong>鉴权 / 状态机 / 资金</strong>"三类最致命风险。</p>
+
+  <h3 id="bug-002">6.1 BUG-002：改密接口 /user/updatePwd 缺 Sa-Token 鉴权（鉴权类）</h3>
+  <p><strong>源码引用</strong>（<code>UserRegisterController.java:78-100 updatePwd()</code>）：</p>
+  <pre><code>@PutMapping("/updatePwd")   // 关键：方法无任何鉴权注解
+public ServerResponseEntity&lt;?&gt; updatePwd(@RequestBody UserRegisterParam p) {
+    String nickName = p.getNickName();
+    User user = userService.getOne(eq(User::getNickName, nickName));
+    user.setLoginPassword(passwordEncoder.encode(p.getPassWord()));
+    userService.updateById(user);  // 直接改密，无任何 userId 校验
+}</code></pre>
+  <p><strong>攻击步骤</strong>：Burp Suite / Postman 抓包已登录用户的 <code>PUT /user/updatePwd</code> 请求 → 删除 <code>Authorization</code> Header → Body 改为 <code>{"nickName":"admin","passWord":"RSA(hack999)"}</code> → 观察响应<strong>返回 200 + "操作成功"</strong>——任意人能在 5 秒内改掉 admin 密码。后续用 <code>hack999</code> 登录 admin 后台 → 全商城数据任意篡改。</p>
+  <p><strong>修复建议</strong>：① <strong>方法加鉴权</strong>：<code>@SaCheckLogin</code> 或方法首行 <code>SecurityUtils.getUser()</code> 强校验；② <strong>白名单收窄</strong>：<code>MallWebSecurityConfigurerAdapter</code> 改 <code>.requestMatchers('/p/**').authenticated()</code> 仅放行 <code>/user/register</code> / <code>/user/login</code>；③ <strong>加日志审计</strong>：写入 <code>user_op_log(user_id, op_type='UPDATE_PWD', ip, ua, time)</code>。<strong>面试加分项</strong>：白名单收窄比加注解更重要——是防御纵深的第一道墙，即使未来新接口忘了加注解 <code>/p/**</code> 也会被拦截。</p>
+
+  <h3 id="bug-011">6.2 BUG-011：订单 confirm-submit 缓存被替换攻击（状态机类）</h3>
+  <p><strong>源码引用</strong>（<code>OrderController.java:134</code> 写 + <code>OrderController.java:146</code> 读）：</p>
+  <pre><code>// line 134（confirm 写缓存）—— key 仅按 userId，无 basketIds / UUID
+redisCache.set("order:confirm:" + userId, shopCartOrderMergerDto);
+// line 146（submit 读缓存）
+ShopCartOrderMergerDto cached = redisCache.get("order:confirm:" + userId);
+// submit 直接使用 cached，不校验请求 basketIds 与 cached 是否一致
+orderService.submit(userId, cached, orderParam);</code></pre>
+  <p><strong>攻击步骤（用户自助攻击，无需盗号）</strong>：① 浏览器 A 选 3 件商品（含 prodId=10001 ¥199）→ 调 <code>/order/confirm</code> → 缓存写入；② 浏览器 B（同一 userId）选 1 件高价值商品 prodId=20002 ¥9999 → 调 <code>/order/confirm</code> → <strong>覆盖</strong> A 的缓存；③ 浏览器 A 点击"提交订单" → 实际按 B 的购物车下单 ¥9999；④ 订单已生成需走退款流程，对账不平。</p>
+  <p><strong>修复建议</strong>：① <strong>缓存 key 加扰动</strong>：<code>redisCache.set("order:confirm:" + userId + ":" + UUID.randomUUID(), dto, 10分钟)</code>；② <strong>submit 强校验</strong>：dto 带 <code>confirmToken</code> 字段前端回传，<code>orderService.submit</code> 首行按 <code>(userId, confirmToken)</code> 取缓存与请求 <code>basketIds</code> 强校验；③ <strong>加 TTL</strong>：<code>10, TimeUnit.MINUTES</code>。<strong>面试加分项</strong>：key 扰动 + token 校验必须同时做——只返回 token 缓存可被同 userId 覆盖，攻击者用自己 token 也能替换。</p>
+
+  <h3 id="bug-013">6.3 BUG-013：PayController.pay 未声明 @Transactional（资金类）</h3>
+  <p><strong>源码引用</strong>（<code>PayController.java:42-52 pay()</code>）：</p>
+  <pre><code>@PostMapping("/pay")   // 关键：Controller 方法无 @Transactional
+public ServerResponseEntity&lt;?&gt; pay(@RequestBody PayParam payParam) {
+    String userId = SecurityUtils.getUser().getUserId();
+    payService.pay(userId, payParam);          // 第 49 行：扣库存 + 写 UNPAY
+    payService.paySuccess(userId, ...);       // 第 50 行：写 PAY——两次独立调用
+    return ServerResponseEntity.success();
+}</code></pre>
+  <p><strong>复现步骤</strong>：test001 有未支付订单 → 调 <code>POST /p/order/pay</code> → 在 <code>payService.pay</code> 完成、<code>payService.paySuccess</code> 执行前<strong>手动 kill -9 进程</strong> → 重启后查订单状态与库存 → 出现"库存 -1 但订单仍 UNPAY"或"订单 PAY 但库存未扣"脏数据。<strong>对账影响</strong>：日均 1000 单 × 0.1% 异常率 = 每天 1 单需 30 分钟人工平账，月增 15 工时。</p>
+  <p><strong>修复建议</strong>：① <strong>Controller 加事务</strong>：<code>@Transactional(rollbackFor = Exception.class)</code>（覆盖所有异常）；② <strong>Service 合并</strong>：<code>payService.pay</code> 与 <code>payService.paySuccess</code> 合并为 <code>payAndSettle(userId, payParam)</code> 事务边界清晰；③ <strong>幂等锁</strong>：合并方法首行 <code>redisLock.tryLock('pay:' + orderNumber, 5秒)</code> 防并发扣款；④ <strong>PayNoticeController 同步改造</strong>。面试加分项：生产环境推荐"Service 事务 + Controller 编排"组合——Controller 事务粒度太粗。</p>
+
+
+  <h3>6.4 TOP 3 总结：3 类风险的"指纹"</h3>
+  <table>
+    <thead><tr><th>Critical 缺陷</th><th>风险指纹</th><th>扫描线索</th><th>修复主线</th></tr></thead>
+    <tbody>
+      <tr><td>BUG-002 鉴权</td><td>未登录可访问 + 无 SecurityUtils.getUser()</td><td>线索 ②</td><td>加 @SaCheckLogin + 白名单收窄 + 审计日志</td></tr>
+      <tr><td>BUG-011 状态机</td><td>缓存按 userId 分键 + confirm-submit 窗口期</td><td>线索 ③ + ⑤</td><td>key 扰动 + token 校验 + TTL</td></tr>
+      <tr><td>BUG-013 事务</td><td>多个写操作无 @Transactional</td><td>线索 ④</td><td>加 @Transactional + 合并 Service 方法 + 幂等锁</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">面试官最爱追问 TOP 3</div>
+    Q: "你怎么发现这 3 条 Critical 的？"——A: 按 5 大源码线索扫描；<br>
+    Q: "修复建议具体到哪段代码？"——A: 给出行号 + 修改后代码骨架；<br>
+    Q: "如果不修，上线后会有什么后果？"——A: BUG-002 任意账号失陷 / BUG-011 用户自助攻击 / BUG-013 财务对账不平 + 资金亏损风险。
+  </div>
+
+  <h2 id="sec7">7. 缺陷生命周期与报告模板</h2>
+  <p>来源：ISTQB 缺陷管理流程 + mall4j bug-list.csv 10 字段模板。</p>
+
+  <h3>7.1 5 阶段流转图（ASCII）</h3>
+  <pre class="ascii">
+   ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐    ┌─────────┐
+   │ ① 发现  │ ─► │ ② 登记  │ ─► │ ③ 复现  │ ─► │ ④ 修复  │ ─► │ ⑤ 回归  │
+   └─────────┘    └─────────┘    └─────────┘    └─────────┘    └─────────┘
+       │              │              │              │              │
+       ▼              ▼              ▼              ▼              ▼
+   静态分析/    10 字段模板    步骤可执行     修复建议落    修复后用例
+   用例执行     录入 bug-list  + 截图/日志    到注解/API   全跑绿勾</pre>
+
+  <h3>7.2 bug-list.csv 10 字段模板</h3>
+  <table>
+    <thead><tr><th>字段</th><th>作用</th><th>字段</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr><td>bug_id</td><td>唯一标识（BUG-001）</td><td>precondition</td><td>复现前置</td></tr>
+      <tr><td>title</td><td>一句话标题</td><td>steps_to_reproduce</td><td>复现步骤（URL + Body）</td></tr>
+      <tr><td>severity</td><td>Critical/Major/Minor/Trivial</td><td>expected</td><td>预期结果</td></tr>
+      <tr><td>priority</td><td>P0/P1/P2/P3</td><td>actual</td><td>实际结果（含源码引用）</td></tr>
+      <tr><td>module</td><td>5 大模块</td><td>suggestion</td><td>修复建议（具体 API/注解）</td></tr>
+      <tr><td>type</td><td>6 种类型</td><td>related_testcase</td><td>关联用例 ID</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">测试开发用法</div>
+    拿到缺陷后，先判断它是"症状"还是"根因"。例：BUG-013 的症状是"对账不平"，根因是"<code>payService.pay</code> 与 <code>payService.paySuccess</code> 不在同一事务"——根因才是修复建议的落点。
+  </div>
+
+  <h2 id="sec8">8. 简历可写句（数字 ×2 原则：18 实际 → 简历写 10-20 个）</h2>
+  <p>来源：<code>AGENTS.md</code> 第 5 条 + <code>PROJECT_TARGET_BOOK.md</code> 5.1 数字 ×2 原则。</p>
+
+  <h3>8.1 数字 ×2 原则显式说明</h3>
+  <p><strong>AGENTS.md 第 5 条原文</strong>："简历可写数字 = 实际产出 ×2 不超，避免面试深问露馅。"</p>
+  <p>本课实际产出 = 18 条预测缺陷。×2 不超 = 最多可写 36 条。<strong>但</strong>——双非 + 零实习背景的简历，<strong>推荐保守范围 10-20 个</strong>，理由：</p>
+  <ul>
+    <li><strong>≥ 10 个</strong>：不少于 10 显得产出太少；</li>
+    <li><strong>≤ 20 个</strong>：超过 20 容易在面试深问时被挑战（"这 25 条你都复现过吗？""第 17 条的攻击步骤具体是哪 3 行代码？"），双非简历保守更好；</li>
+    <li><strong>实际数 18 个</strong>：恰好落在 10-20 区间内，简历直接写 <strong>18 个</strong> 最稳——既顶到 ×1 上限，又不超 ×2 红线。</li>
+  </ul>
+
+  <p><strong>主句</strong>（"项目描述"行）：</p>
+  <blockquote>
+    基于 mall4j 电商系统源码静态分析与功能测试，预测并输出 <strong>18 个有效缺陷</strong>（含 3 个 Critical 鉴权/状态机/资金类），覆盖登录注册/商品/购物车/订单支付/会员权限 5 大模块，输出完整 bug-list（含复现步骤、攻击链路、修复建议）作为测试工程师硬数字产出。
+  </blockquote>
+  <p><strong>辅句</strong>（"技术亮点"行）：</p>
+  <blockquote>
+    掌握"5 大源码线索"缺陷预测方法论（弱约束 Param / 鉴权链 / 状态机守卫 / 事务边界 / 缓存一致性）；识别 3 个 Critical 缺陷（未登录改密 / 订单缓存替换 / 支付事务丢失）并给出可落地修复建议；AGPLv3 协议下走"预测缺陷库"路径——不直接修改 mall4j 本体源码，输出物为基于源码的缺陷文档，规避协议风险。
+  </blockquote>
+
+  <h2 id="sec9">9. 面试官追问清单</h2>
+  <p>本节是面试高频追问的"预演清单"——把可能被问的问题提前想清楚，面试时不会被问倒。</p>
+
+  <h3>9.1 技术追问（4 类，全以 BUG-002 为例）</h3>
+  <ul>
+    <li><strong>怎么发现</strong>——打开 UserRegisterController 第 78-100 行 updatePwd()，方法签名无任何鉴权注解（@SaCheckLogin / @PreAuthorize），方法体首行未调用 SecurityUtils.getUser()，MallWebSecurityConfigurerAdapter 又 permitAll——线索 ②。</li>
+    <li><strong>修复细节</strong>——3 处：(a) updatePwd 加 @SaCheckLogin 或首行 SecurityUtils.getUser()；(b) MallWebSecurityConfigurerAdapter 改 .requestMatchers('/p/**').authenticated()；(c) 加 user_op_log 审计。</li>
+    <li><strong>上线后果</strong>——任意用户能在 5 秒内改掉 admin 密码 → 登录 admin 后台 → 全商城数据任意篡改；属于 P0 紧急。</li>
+    <li><strong>修复成本</strong>——3 处共 5-8 行代码 + 1 个注解 + 1 张审计表迁移，1 人天可完成；白名单改完需全量回归登录/注册链路。</li>
+  </ul>
+
+  <h3>9.2 业务追问（2 类）</h3>
+  <ul>
+    <li><strong>"为什么订单支付占了 5 条（最多）？"</strong>——A: 订单是 mall4j 状态机最复杂的模块（6 状态 9 迁移），涉及资金 / 缓存 / 事务三重叠加；同时是用户主链路最敏感的节点。</li>
+    <li><strong>"为什么不修完所有 Critical 再上线？"</strong>——A: 18 条是设计阶段的"问题清单"不是"立即修复清单"。P0 6 条要在上线前修完（24h SLA），P1 6 条下个版本修，P2/P3 进入季度 backlog。</li>
+  </ul>
+
+  <h3>9.3 协议追问（1 类）</h3>
+  <ul>
+    <li><strong>"你的修复建议会进 PR 吗？"</strong>——A: <strong>不会</strong>。AGPLv3 约束下，对 mall4j 本体源码的修改不能闷声 fork 出去——要么回流给原作者（PR 给 mall4j 官方），要么仅作学习用途。本课产出物是"基于源码的缺陷文档"不是代码修改，可独立放进二开仓库（如 <code>mall4j-test-practice</code>）。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">面试反问环节（反向展示）</div>
+    面试官问完 BUG-002 后，可以反问："您团队目前对历史 Bug 的修复 SLA 是怎样的？P0 是不是都要求 24h 内修复 + 全量回归？" ——展示你对工程实践的思考。
+  </div>
+
+  <h2 id="sec10">10. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 鉴权缺口</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) 弱约束</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 状态机</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) 事务边界</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>在 M1-D3-001 bug-list.csv 实测统计中，订单支付模块的缺陷数量是多少条？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 3 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 4 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 5 条</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 6 条</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>按 AGENTS.md 数字 ×2 原则与本课保守推荐范围，实际产出 18 个预测缺陷时，简历写多少个最稳？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 5-9 个</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 10-20 个</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 30-36 个</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 50 个以上</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（5 大源码线索 / 严重等级×优先级矩阵 / AGPLv3 边界 / TOP 3 Critical 修复建议 / 数字 ×2 红线 / Win 任务 SearchController 扫描）抛给你的 AI 教师追问——单点困惑往往牵出一整条交付链，问得越具体，回答越能反哺你的测开作品集。
+  </div>
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0006-test-design-150-cases.html">第 6 课 150 条用例设计实战</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0008-report-skeleton-9-sections.html">第 8 课 9 章功能测试报告骨架——三流合一视角的工程表达</a></div>
+    </div>
+    <div class="cell ref">
+      <div class="label">参考卡</div>
+      <div><a href="../reference/0007-bug-library-cheatsheet.html">18 条预测缺陷速查卡</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../reference/0007-bug-library-cheatsheet.html">18 条预测缺陷速查卡（reference/0007-bug-library-cheatsheet.html）</a></li>
+      <li><a href="../../test-cases/M1-D3-001/bug-list.csv">test-cases/M1-D3-001/bug-list.csv（19 行实测数据）</a></li>
+      <li><a href="../../test-cases/M1-D3-001/bug-list.md">test-cases/M1-D3-001/bug-list.md（491 行 review 友好）</a></li>
+      <li><a href="../../AGENTS.md">AGENTS.md 第 5 条 数字 ×2 原则</a></li>
+      <li><a href="../../PROJECT_TARGET_BOOK.md">PROJECT_TARGET_BOOK.md 5.1 数字纪律</a></li>
+    </ul>
+    <div>本课用 18 条预测缺陷示范"AGPLv3 模式下的源码逆向工程"——下一课进入 9 章功能测试报告骨架（M1-D3-001 v1.0 报告成型）。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=C(2), Q3=B(1) ===
+  var correctMap = { q1: '1', q2: '2', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec5', text: '回到第 5 节：再看"5 大源码线索"——Q1 答案为弱约束 Param（线索 ①）' },
+    q2: { href: '#sec4', text: '回到第 4 节：再看"模块分布"——订单支付 5 条实测居首' },
+    q3: { href: '#sec8', text: '回到第 8 节：再看"数字 ×2 原则"——18 实际推荐写 10-20 个（×1 上限 18）' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+      var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>M3-D10 Locust 速查卡 · 100 用户 / 60s 压测</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    @page { size: A4; margin: 1.5cm; }
+    body { font-size: 10pt; line-height: 1.4; max-width: 18cm; margin: 0 auto; padding: 1cm; }
+    .card { border: 1px solid #ddd; padding: 0.6em 0.8em; margin-bottom: 0.8em; border-radius: 4px; background: #fafafa; }
+    .card h3 { margin: 0 0 0.3em; font-size: 12pt; color: #2c3e50; }
+    .card p, .card ul, .card ol { margin: 0.3em 0; font-size: 9.5pt; }
+    .card ul, .card ol { padding-left: 1.5em; }
+    .card li { margin: 0.15em 0; }
+    .card code { background: #ecf0f1; padding: 1px 4px; border-radius: 2px; font-size: 9pt; }
+    .card pre { background: #2c3e50; color: #ecf0f1; padding: 0.5em; border-radius: 3px; overflow-x: auto; font-size: 8.5pt; }
+    .card pre code { background: transparent; padding: 0; color: inherit; font-size: inherit; }
+    h1 { font-size: 18pt; border-bottom: 2px solid #2c3e50; padding-bottom: 0.3em; }
+    h2 { font-size: 13pt; color: #34495e; margin-top: 1em; margin-bottom: 0.5em; }
+    footer { margin-top: 1.5em; padding-top: 0.5em; border-top: 1px solid #ddd; font-size: 9pt; }
+    @media print {
+      .card { break-inside: avoid; page-break-inside: avoid; }
+      h2 { break-after: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <h1>M3-D10-001 Locust 速查卡 · 100 用户 / 60s 压测</h1>
+  <p class="meta">mall4j · AGPLv3 边界 100% 守 · 适用 M3-D10-001 + 后续 M3-D11-001 阶梯压测</p>
+
+  <h2>§1 locustfile 最小骨架</h2>
+  <div class="card">
+    <h3>HttpUser + 3 @task + on_start</h3>
+    <pre><code>import sys
+sys.path.insert(0, '../api-auto')
+
+from locust import HttpUser, task, between
+from common.mall4j_aes import encrypt_password
+
+NUM_USERS = 100
+SPAWN_RATE = 10
+RUN_TIME = "60s"
+HOST = "http://127.0.0.1:8086"
+
+class Mall4jUser(HttpUser):
+    wait_time = between(1, 3)
+
+    def on_start(self):
+        ts = str(int(time.time() * 1000))
+        encrypted = encrypt_password(ts, "test123456")
+        resp = self.client.post("/adminLogin", json={
+            "username": "testuser",
+            "password": encrypted,
+            "captchaVerification": "mock-bypass"
+        })
+        self.token = resp.json()["data"]["accessToken"]
+
+    @task(60)
+    def view_prod_list(self):
+        self.client.get("/prod/prodList?page=1&amp;size=20",
+                       headers={"Authorization": self.token})
+
+    @task(30)
+    def view_prod_detail(self):
+        self.client.get("/prod/prodInfo?prodId=1")
+
+    @task(10)
+    def view_my_info(self):
+        self.client.get("/p/user/info")</code></pre>
+  </div>
+
+  <h2>§2 两种运行模式</h2>
+  <div class="card">
+    <h3>Web UI vs Headless</h3>
+    <pre><code># 模式 1：Web UI（开发调参）
+locust -f locustfile.py --host=http://127.0.0.1:8086
+# 浏览器打开 http://localhost:8089 → 输 100/10/60s → Start
+
+# 模式 2：Headless（CI / 自动化）
+locust -f locustfile.py \
+    --host=http://127.0.0.1:8086 \
+    --users 100 --spawn-rate 10 --run-time 60s \
+    --headless --only-summary \
+    --html reports/locust-report.html \
+    --csv reports/locust-stats</code></pre>
+  </div>
+
+  <h2>§3 run-locust.sh 一键脚本</h2>
+  <div class="card">
+    <h3>Windows Git Bash 必须 GEVENT_BACKEND=select</h3>
+    <pre><code>#!/usr/bin/env bash
+set -euo pipefail
+export GEVENT_BACKEND=select   # Windows libuv 兼容坑
+
+REPORTS_DIR="${REPORTS_DIR:-reports}"
+mkdir -p "$REPORTS_DIR"
+
+locust -f locustfile.py \
+    --host="${MALL4J_HOST:-http://127.0.0.1:8086}" \
+    --users 100 --spawn-rate 10 --run-time 60s \
+    --headless --only-summary \
+    --html "$REPORTS_DIR/locust-report.html" \
+    --csv "$REPORTS_DIR/locust-stats"</code></pre>
+  </div>
+
+  <h2>§4 stats 字段速查</h2>
+  <div class="card">
+    <h3>9 个核心指标</h3>
+    <ul>
+      <li><strong># Requests</strong>：总请求数</li>
+      <li><strong># Fails</strong>：失败数（错误率 = #Fails / #Requests）</li>
+      <li><strong>Median</strong>：中位数延迟（ms）</li>
+      <li><strong>95%ile / 99%ile</strong>：P95 / P99 延迟</li>
+      <li><strong>Average</strong>：平均延迟（注意：被极端值拉偏）</li>
+      <li><strong>Min / Max</strong>：最快 / 最慢</li>
+      <li><strong>Average size</strong>：平均响应字节</li>
+      <li><strong>Current RPS</strong>：当前瞬时 RPS</li>
+      <li><strong>Current Failures/s</strong>：当前瞬时失败数</li>
+    </ul>
+  </div>
+
+  <h2>§5 6 件非显然 fix</h2>
+  <div class="card">
+    <h3>踩坑清单</h3>
+    <ol>
+      <li><strong>AES 复用 lesson 0012</strong> — sys.path.insert + from common.mall4j_aes import encrypt_password</li>
+      <li><strong>try/except ImportError</strong> — locust 包缺失时优雅降级到 stub</li>
+      <li><strong>adminLogin 而非 /login</strong> — 后端 LoginController 走 /adminLogin</li>
+      <li><strong>GEVENT_BACKEND=select</strong> — Windows Git Bash 必须</li>
+      <li><strong>NUM_USERS=100 顶部常量</strong> — 不用命令行 --users</li>
+      <li><strong>CSV DictReader 解析</strong> — csv.DictReader 直接读 stats.csv</li>
+    </ol>
+  </div>
+
+  <h2>§6 异常阈值标注</h2>
+  <div class="card">
+    <h3>什么算"性能瓶颈"</h3>
+    <ul>
+      <li><strong>TPS &lt; 30</strong> → 单实例 Spring Boot 极限，警告"考虑分布式"</li>
+      <li><strong>P99 &gt; 2000ms</strong> → 单接口性能瓶颈，警告"考虑缓存/索引"</li>
+      <li><strong>错误率 &gt; 1%</strong> → 后端异常，警告"检查 mall4j-api 日志"</li>
+      <li><strong>JVM full GC</strong> → java -Xmx512m -jar 调优</li>
+    </ul>
+  </div>
+
+  <h2>§7 实跑 + 报告解析</h2>
+  <div class="card">
+    <h3>用户本机 4 步实跑</h3>
+    <pre><code># 1. 装 locust
+pip install -r test-cases/perf/requirements-locust.txt
+
+# 2. 启 mall4j
+java -jar yami-shop-api/target/yami-shop-api-0.0.1-SNAPSHOT.jar
+
+# 3. 跑压测
+cd test-cases/perf &amp;&amp; bash run-locust.sh
+
+# 4. 看报告
+open reports/locust-report.html
+# 或：python generate-locust-report.py → reports/locust-summary.md</code></pre>
+    <p><strong>关键路径</strong>：<code>test-cases/perf/locustfile.py</code> · <code>run-locust.sh</code> · <code>reports/locust-report.html</code> · <code>reports/locust-stats.csv</code> · <code>doc/4-技术实现/M3-D10-001-impl-notes.md</code></p>
+  </div>
+
+  <footer>
+    <p>第 15 课配套速查卡 · <a href="../lessons/0015-locust-performance-testing.html">返回主课</a></p>
+    <p class="meta">mall4j M3-D10-001 · 2026-09-14</p>
+  </footer>
+</body>
+</html>

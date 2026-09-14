@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 12 课 pytest YAML 数据驱动 + Playwright UI 自动化起步</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 12 课：pytest YAML 数据驱动 + Playwright UI 自动化起步</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 12 课</span>
+    <span class="tag">难度 ★★★★★</span>
+    <span class="tag">时长 50 分钟</span>
+    <span class="tag">实战对象 M2-D7-001 pytest + YAML + Playwright UI 起步</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话回顾（接 L10 pytest 起步 → L12 数据驱动 + UI 起步）</a></li>
+      <li><a href="#sec2">为什么测试工程师必须懂 YAML 数据驱动 + UI 自动化</a></li>
+      <li><a href="#sec3">28 件产物速览：5 yaml + 7 API wrapper + 8 testcases + 7 common + 3 UI</a></li>
+      <li><a href="#sec4">核心概念 × 5（{{var}} 替换 / 探针机制 / 业务码 bug / UI 路径 1 / 缺包降级）</a></li>
+      <li><a href="#sec5">动手练：5 分钟 pytest --collect-only 验证 54 用例</a></li>
+      <li><a href="#sec6">课堂小测 + 收官提示</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话回顾（接 L10 pytest 起步 → L12 数据驱动 + UI 起步）</h2>
+  <p>第 10 课把 10 条接口用例资产化到 pytest + requests 骨架（23 文件 / 6 PASS + 4 SKIP / ApiClient + fixture + allure 降级）——<strong>起步版</strong>。本课换条腿：把"硬编码用例"升级成"<strong>YAML 数据驱动</strong>"（7 yaml / 47 case / 探针自动写回 skuId/basketId/addrId），并<strong>起步 UI 自动化</strong>（Playwright + 路径 1 降级 + 缺包优雅降级）。</p>
+  <ul>
+    <li><strong>第 10 课（pytest + requests 起步）</strong>：23 文件 / ApiClient 鉴权 + ts/nonce 自动注入 / 1 yaml 数据文件（login 5 case）/ 10 用例 / 5 fixture + allure 优雅降级。</li>
+    <li><strong>本课（M2-D7-001 YAML + UI 起步）</strong>：<strong>28 文件变更</strong>（10 新增 + 12 扩列 + 3 修 bug + 3 配置），<strong>5 yaml 数据文件 / 47 case</strong>（含探针机制 + <code>{{var}}</code> 模板替换 + SafeDict），<strong>2 Playwright UI 用例</strong>（admin + shop 端路径 1 降级），以及 1 处<strong>业务码 String bug 修复</strong>的故事。</li>
+    <li><strong>L10 → L12 的进阶路径</strong>：起步（10 条硬编码 + 1 yaml）→ 数据驱动（47 yaml case 驱动 47 个 parametrize id） + UI 起步（Playwright 路径 1 绕滑块）；L10 是"能跑"，L12 是"跑得动数据流 + 跑得动 UI"。</li>
+    <li><strong>本课的承诺</strong>：从 10 条硬编码用例升级到 47 条 yaml 数据驱动 + 2 条 UI 用例，<code>pytest --collect-only testcases/</code> 输出 <strong>54 collected</strong>（包括 skip），跑 <code>bash run-ui.sh</code> 拿截图证据——这<strong>是测试开发岗简历的硬通货</strong>。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">本课定位</div>
+    L10 = "<strong>pytest 起步</strong>"（23 文件 / 10 用例 / ApiClient + 1 fixture），L12 = "<strong>pytest YAML 数据驱动 + UI 起步</strong>"（28 文件 / 47 yaml 用例 + 2 UI / 7 yaml + SafeDict + 探针 + 路径 1 降级）。前者决定能不能在 CI 里跑测试；后者决定能不能在 CI 里跑<strong>数据驱动的全量回归 + UI 自动化起步</strong>。
+  </div>
+
+  <h2 id="sec2">2. 为什么测试工程师必须懂 YAML 数据驱动 + UI 自动化</h2>
+  <p>硬编码 10 条用例只能写"会用 pytest"；47 条 YAML 数据驱动 + 2 条 UI 用例才能写"<strong>独立设计数据流 + UI 自动化方案</strong>"——这是测试开发岗简历上<strong>必看</strong>的物证。3 个理由：</p>
+  <table>
+    <thead><tr><th>#</th><th>理由</th><th>对应简历/工作场景</th><th>本课落地</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>YAML 数据驱动</strong></td>
+        <td>"基于 7 个 yaml 数据文件 + parametrize 驱动 47 条接口用例，覆盖登录 / 商品 / 购物车 / 订单 / 地址 / 我的订单 / 用户 7 个 Controller"——校招测试岗必看</td>
+        <td><code>data/{login,prod,cart,order,addr,my_order,user}_data.yaml</code> 共 7 文件 / 47 case；统一 schema 9 字段（name/params/expected_code/expected_msg_sub/pre/post/priority/skipif/description）</td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>探针 + {{var}} 模板替换</strong></td>
+        <td>"理解 yaml 探针机制（probe_sku / probe_addr / probe_order）自动从真实接口拿 ID 写回 env，再用 <code>{{skuId}}</code> / <code>{{addrId}}</code> 替换下游参数"——链路数据流核心能力</td>
+        <td><code>common/yaml_loader.py</code> SafeDict + substitute + probe_* helper；与 D5 Postman v3.0 探针风格一致</td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>UI 自动化 + 路径 1 降级</strong></td>
+        <td>"用 Playwright sync_api + Page Object 基础类起步 UI 自动化，理解滑块验证码三层障碍（blockPuzzle + AES 加密 + 路由跳转），用 API 拿 token + cookie 注入路径 1 降级"——端到端测试必备</td>
+        <td><code>common/ui_pages.py</code> BasePage（goto/fill/click/wait_for_url/inject_auth_cookie/screenshot）；<code>test_ui_login.py</code> 2 条用例（admin + shop）</td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>D7 brief §0 总览</strong>：M2-D7-001 把 M2-D6-001 的 10 用例扩展到 <strong>≥ 42 用例</strong>（5 yaml 数据驱动）+ 增加 UI 自动化（Playwright + 2 个登录 UI 用例）。<strong>100% 离线可写</strong>（pip 不跑 / <code>pytest --collect-only</code> / UI 用例默认 skip if no browser）；启服务后即跑。<strong>4 件关键 fix</strong>：(1) 业务码 String bug 修复；(2) UI 滑块验证码路径选择；(3) skip 标记保留与逐步解除；(4) Playwright 缺包优雅降级。</p>
+  <div class="interview">
+    <div class="who">简历金句</div>
+    "基于 pytest + requests + Playwright 设计 mall4j 接口自动化框架，扩展到 47 条 YAML 数据驱动用例（5 yaml 文件 / 7 Controller）+ 2 条 Playwright UI 用例（admin + shop 端路径 1 降级），用 SafeDict + substitute 实现 <code>{{var}}</code> 模板替换 + 探针机制（probe_sku/probe_addr/probe_order）自动写回 ID，修复 <code>assert_business_code(resp, 200)</code> String 业务码 bug，用 conftest 顶层 try/except 实现 Playwright 缺包优雅降级"——这句直接写进 M2 项目经验。
+  </div>
+
+  <h2 id="sec3">3. 28 件产物速览：5 yaml + 7 API wrapper + 8 testcases + 7 common + 3 UI</h2>
+  <p>来源：<code>test-cases/api-auto/</code> + <code>doc/3-API接口/M2-D7-001-brief.md</code>。本课 28 件产物全部是<strong>纯文本 + YAML + Python</strong>,无二进制:</p>
+  <table>
+    <thead><tr><th>类别</th><th>产物</th><th>路径</th><th>行数</th><th>作用</th></tr></thead>
+    <tbody>
+      <tr>
+        <td rowspan="3"><strong>common 工具（3 件）</strong></td>
+        <td><strong>yaml_loader.py</strong></td>
+        <td><code>common/yaml_loader.py</code></td>
+        <td>~80</td>
+        <td>D7 升级：SafeDict + substitute 递归 <code>{{var}}</code> 替换；probe_* helper；保留 D6 data_loader.py 兼容</td>
+      </tr>
+      <tr>
+        <td><strong>ui_pages.py</strong></td>
+        <td><code>common/ui_pages.py</code></td>
+        <td>~60</td>
+        <td>Playwright Page Object 基础类 BasePage（goto/fill/click/wait_for_url/inject_auth_cookie/screenshot）</td>
+      </tr>
+      <tr>
+        <td><strong>mall4j_aes.py</strong></td>
+        <td><code>common/mall4j_aes.py</code></td>
+        <td>37</td>
+        <td>D6 复用：Python AES-ECB-PKCS7 兼容 mall4j 前端 crypto.js；UI 测试调 <code>api_client._encrypt()</code> 用</td>
+      </tr>
+      <tr>
+        <td rowspan="5"><strong>5 yaml 数据文件（5 件）</strong></td>
+        <td><strong>login_data.yaml</strong></td>
+        <td><code>data/login_data.yaml</code></td>
+        <td>~60（5 → 8 条）</td>
+        <td>D7 扩展：sysType=ADMIN 登录 2 条 + sysType="" 校验失败 1 条；保留 D6 5 条</td>
+      </tr>
+      <tr>
+        <td><strong>prod_data.yaml</strong></td>
+        <td><code>data/prod_data.yaml</code></td>
+        <td>~100（10 条）</td>
+        <td>覆盖 pageProd / prodInfo / getSkuList / lastedProdPage / prodListByTagId / tagProdList / moreBuyProdList 7 端点；业务码 <code>'00000'</code>×8 + <code>'A00014'</code>×2</td>
+      </tr>
+      <tr>
+        <td><strong>cart_data.yaml</strong></td>
+        <td><code>data/cart_data.yaml</code></td>
+        <td>~90（8 条）</td>
+        <td>ShopCartController 8 端点；含 1 条探针 <code>pre: probe_sku</code> 调 <code>/prod/prodInfo</code> + <code>/sku/getSkuList</code> 拿 skuId 写回</td>
+      </tr>
+      <tr>
+        <td><strong>order_data.yaml</strong></td>
+        <td><code>data/order_data.yaml</code></td>
+        <td>~80（6 条）</td>
+        <td>orderController + myOrderController 6 端点；含 <code>path</code> 变量（orderNumber）</td>
+      </tr>
+      <tr>
+        <td><strong>addr_data.yaml</strong></td>
+        <td><code>data/addr_data.yaml</code></td>
+        <td>~70（5 条）</td>
+        <td>AddrController 5 端点；含 1 条探针 <code>pre: probe_addr</code>（list 后取 addrId）</td>
+      </tr>
+      <tr>
+        <td rowspan="5"><strong>7 API wrapper（5 新增 + 2 扩列）</strong></td>
+        <td><strong>CartAPI</strong></td>
+        <td><code>api/cart_api.py</code></td>
+        <td>~70</td>
+        <td>ShopCartController 8 端点（info / changeItem / deleteItem / deleteAll / prodCount / totalPay / expiryProdList / cleanExpiryProdList）</td>
+      </tr>
+      <tr>
+        <td><strong>AddrAPI</strong></td>
+        <td><code>api/addr_api.py</code></td>
+        <td>~70</td>
+        <td>AddrController 5 端点（list / addAddr / updateAddr / deleteAddr / defaultAddr / addrInfo）</td>
+      </tr>
+      <tr>
+        <td><strong>MyOrderAPI</strong></td>
+        <td><code>api/my_order_api.py</code></td>
+        <td>~70</td>
+        <td>MyOrderController 6 端点（orderDetail / myOrder / cancel / receipt / delete / orderCount）</td>
+      </tr>
+      <tr>
+        <td><strong>UserAPI</strong></td>
+        <td><code>api/user_api.py</code></td>
+        <td>~40</td>
+        <td>UserController 2 端点（userInfo / setUserInfo）</td>
+      </tr>
+      <tr>
+        <td><strong>ProdAPI 扩列 + LoginAPI 扩列</strong></td>
+        <td><code>api/{prod,login}_api.py</code></td>
+        <td>53→90 / 47→60</td>
+        <td>ProdAPI 加 4 端点（lasted_prod_page / prod_list_by_tag_id / tag_prod_list / more_buy_prod_list）；LoginAPI 加 admin_login</td>
+      </tr>
+      <tr>
+        <td rowspan="4"><strong>8 testcases（4 新增 + 2 扩列 + 1 修 bug + 1 UI）</strong></td>
+        <td><strong>test_cart.py + test_addr.py</strong></td>
+        <td><code>testcases/test_{cart,addr}.py</code></td>
+        <td>90 / 70</td>
+        <td>参数化驱动 8 cart + 5 addr 用例；含探针 pre/post fixture；addr 用 <code>probe_addr</code></td>
+      </tr>
+      <tr>
+        <td><strong>test_prod.py 修 bug + 扩列</strong></td>
+        <td><code>testcases/test_prod.py</code></td>
+        <td>63 → 80</td>
+        <td>(a) <strong>修 <code>assert_business_code(resp, 200)</code> → <code>"00000"</code>（行 47/61）</strong>；(b) 加 parametrize 驱动 10 条 yaml 用例</td>
+      </tr>
+      <tr>
+        <td><strong>test_order.py 扩列</strong></td>
+        <td><code>testcases/test_order.py</code></td>
+        <td>55 → 90</td>
+        <td>(a) 解 <code>@pytest.mark.skip</code>（保留 test_prod_info 的 skipif 兜底）；(b) 加参数化驱动 4 条</td>
+      </tr>
+      <tr>
+        <td><strong>test_ui_login.py</strong></td>
+        <td><code>testcases/test_ui_login.py</code></td>
+        <td>~90</td>
+        <td>2 条 Playwright UI 用例（test_admin_login + test_shop_login）；<code>@pytest.mark.ui</code> + <code>@pytest.mark.skipif(not _HAS_PLAYWRIGHT)</code> 双层 skip</td>
+      </tr>
+      <tr>
+        <td rowspan="3"><strong>UI + 配置（3 件）</strong></td>
+        <td><strong>conftest.py 扩列</strong></td>
+        <td><code>conftest.py</code></td>
+        <td>142 → 175</td>
+        <td>顶层 <code>try/except ImportError</code> 包 <code>playwright.sync_api</code>；新增 <code>page</code> fixture（session 级 chromium launch + yield）</td>
+      </tr>
+      <tr>
+        <td><strong>run-ui.sh + ui-evidence/README.md</strong></td>
+        <td><code>test-cases/api-auto/</code></td>
+        <td>30 / 30</td>
+        <td><code>pip install playwright</code> + <code>playwright install chromium</code> + <code>pytest -m ui</code>；网络失败时 warn 不报错；截图目录说明</td>
+      </tr>
+      <tr>
+        <td><strong>pytest.ini + requirements.txt 扩列</strong></td>
+        <td><code>test-cases/api-auto/</code></td>
+        <td>13→18 / 6→9</td>
+        <td>pytest.ini 加 <code>ui</code> marker；requirements.txt 加 <code>playwright==1.47.0</code> + <code>pytest-playwright==0.5.2</code></td>
+      </tr>
+    </tbody>
+  </table>
+  <p><strong>关键数字</strong>：5 yaml 数据文件 + 47 yaml case（8+10+8+6+5+8+2 = 47）+ 4 yaml 数据驱动的新增 testcases 文件 + 2 UI 用例 = <strong>54 collected</strong>（含 skip）。</p>
+  <p><strong>3 处关键设计决策</strong>：</p>
+  <ul>
+    <li><strong>SafeDict 替代 dict 做 <code>{{var}}</code> 替换</strong>——缺 key 时返回 <code>{{key}}</code> 字面，避免 KeyError 让 yaml 写错时立刻看到。</li>
+    <li><strong>探针写回用 fixture 不耦合 yaml loader</strong>——<code>probe_sku</code> 调 <code>/prod/prodInfo</code> + <code>/sku/getSkuList</code> 拿 skuId 写 <code>os.environ</code>，yaml_loader 读 env；与 D5 Postman v3.0 探针风格一致（双重写 collectionVariables + environment）。</li>
+    <li><strong>UI 路径 1 绕滑块</strong>——不碰 blockPuzzle 组件；用 API 拿 token + <code>page.context.add_cookies</code> 注入 + 跳首页；UI 用例只验证"cookie 注入 + 路由跳转 + 截图存证"。</li>
+  </ul>
+
+  <h2 id="sec4">4. 核心概念 × 5（{{var}} 替换 / 探针机制 / 业务码 bug / UI 路径 1 / 缺包降级）</h2>
+
+  <h3>4.1 概念 1：YAML 数据驱动 + <code>{{var}}</code> 模板替换（substitute + SafeDict）</h3>
+  <p>硬编码 10 条用例的<strong>致命伤</strong>：每条用例都要手写一段 Python 代码；改一条断言 / 加一条 case / 改一处 schema 都要 4-5 个文件来回切。YAML 数据驱动的修法：把"<strong>用例逻辑</strong>"（Python 测试函数）和"<strong>用例数据</strong>"（yaml 文件）解耦——同一个 <code>test_func(case)</code> 跑 N 条 yaml case。</p>
+  <p>本课的 7 个 yaml 文件 + 47 条 case，<strong>每条 case 触发一个 parametrize id</strong>（如 <code>test_prod_info[加购成功-探针 prodId]</code>）；每条 case 的 <code>body</code> / <code>query</code> / <code>path</code> 可能含 <code>{{skuId}}</code> / <code>{{addrId}}</code> / <code>{{basketId}}</code> 等动态变量。</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant T as test_func
+    participant Y as yaml_loader
+    participant E as os.environ
+    participant S as mall4j 后端
+    Note over T,Y: parametrize 阶段
+    Y->>Y: yaml.safe_load("data/cart_data.yaml")
+    Y->>Y: substitute(case["params"], os.environ)
+    Note over Y,E: 替换 {{skuId}} 为真实值
+    Y-->>T: 已替换的 params dict
+    Note over T,S: 用例执行
+    T->>S: POST /p/shopCart/changeItem + 已替换的 body
+    S-->>T: 200 + basketId
+    T->>T: post.write_basket_id 写回 env
+    style Y fill:#d4e6f1,stroke:#2874a6
+    style E fill:#fef9e7,stroke:#888
+    style S fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>substitute + SafeDict 核心代码</strong>（<code>common/yaml_loader.py</code>）：</p>
+  <pre><code>class SafeDict(dict):
+    """dict 子类：缺 key 时返回 '{{key}}' 字面，避免 KeyError 崩溃。"""
+    def __missing__(self, key):
+        return "{{" + key + "}}"
+
+def substitute(value, mapping):
+    """递归替换 dict/list/str 里的 {{var}} 占位。"""
+    if isinstance(value, str):
+        return value.format_map(SafeDict(mapping))
+    if isinstance(value, dict):
+        return {k: substitute(v, mapping) for k, v in value.items()}
+    if isinstance(value, list):
+        return [substitute(v, mapping) for v in value]
+    return value
+
+def pytest_yaml_cases(path: str, key: str):
+    """读 YAML 数据文件的 key 列表，用于 parametrize。"""
+    import yaml
+    with open(path, encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    return data[key]</code></pre>
+  <div class="interview">
+    <div class="who">SafeDict 金句</div>
+    "<strong>SafeDict 让 yaml 写错时立刻看到 <code>{{key}}</code> 字面</strong>"——如果用 <code>str.format</code> 缺 key 会抛 KeyError，整个 collect 阶段崩；用 SafeDict 返回字面占位，下游 <code>params.body.skuId = "{{skuId}}"</code> 被发送到后端 → 后端返回 <code>A00014</code> 业务码失败，用例 FAIL（不是 ERROR），用户立刻看到"哦 probe 没跑通"。这才是优雅降级。
+  </div>
+
+  <h3>4.2 概念 2：探针机制（D5 风格 probe_sku/probe_addr/probe_order）+ write_env post helper</h3>
+  <p>D5 Postman v3.0 已落地"<strong>用真实接口取代 fixture SQL</strong>"探针机制（详见 L11 §4.1）。D7 pytest 沿用此风格：yaml <code>pre.type</code> 字段声明探针，<code>post.type</code> 字段声明写回，<strong>不需要任何 fixture SQL</strong>。</p>
+  <p>3 种探针 helper（<code>common/yaml_loader.py</code> 间接调用 / fixture 实装）：</p>
+  <pre class="mermaid">
+graph LR
+    A["yaml case<br/>pre: probe_sku<br/>prod_id: 1"] --> B["probe_sku helper<br/>调 /prod/prodInfo"]
+    B --> C["调 /sku/getSkuList<br/>拿 skuId"]
+    C --> D["写回 os.environ<br/>skuId=2"]
+    D --> E["substitute 替换<br/>body.skuId={{skuId}}<br/>→ 2"]
+    E --> F["POST /p/shopCart/changeItem<br/>{prodId:1, skuId:2}"]
+    F --> G["200 + basketId"]
+    G --> H["post: write_basket_id<br/>写回 os.environ"]
+    H --> I["下一条 case 引用<br/>{{basketId}}"]
+    style A fill:#fadbd8,stroke:#c0392b
+    style D fill:#fef9e7,stroke:#888
+    style H fill:#fef9e7,stroke:#888
+    style F fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>yaml 探针样例</strong>（<code>data/cart_data.yaml</code>）：</p>
+  <pre><code>- name: 加购成功-探针 prodId
+  description: 探针先取真实 skuId，再加购
+  pre:
+    type: probe_sku
+    prod_id: 1
+  params:
+    path: /p/shopCart/changeItem
+    method: POST
+    need_auth: True
+    body:
+      prodId: 1
+      skuId: '{{skuId}}'      # 探针写回后替换
+      shopId: 1
+      count: 1
+  expected_code: '00000'
+  post:
+    type: write_basket_id
+    from: '$.data'
+  priority: p0</code></pre>
+  <p><strong>3 个探针 + 3 个写回点的链路位置</strong>：</p>
+  <ul>
+    <li><strong>probe_sku → write skuId</strong>（cart 用例，data/cart_data.yaml 行 3-15）</li>
+    <li><strong>probe_addr → write addrId</strong>（addr 用例，data/addr_data.yaml 行 12-25）</li>
+    <li><strong>write_basket_id → write basketId</strong>（cart 加购成功后供 order 引用，post: write_basket_id）</li>
+    <li><strong>write_order_number</strong>（order submit 后供 cancel/receipt 引用，post: write_order_number）</li>
+  </ul>
+  <div class="interview">
+    <div class="who">探针金句</div>
+    "<strong>探针 = 用真实接口取代 fixture SQL</strong>"——零外部依赖 + 可重跑 + 降级友好（探针失败时降级到 env 默认值 prodId=1）。fixture SQL 仍可叠加：用户跑 <code>evidence/cart-fixture.sql</code> 后，env <code>otherUserAddrId / orderNumberPaid</code> 会被真实数据覆盖。
+  </div>
+
+  <h3>4.3 概念 3：业务码 String 断言（test_prod.py 3 处 bug 修复的故事）</h3>
+  <p>D6 留下的<strong>致命伤</strong>：<code>test_prod.py</code> 行 47 / 61 调 <code>assert_business_code(resp, 200)</code> 传<strong>数字 200</strong>，但 mall4j 后端 <code>ServerResponseEntity</code> 的 <code>code</code> 字段是 <strong>String 类型</strong>（详见 L11 §4.2 五业务码模板）。D7 必须统一改 <code>"00000"</code> 字符串。</p>
+  <p>本课的 3 处业务码 bug 修复完整故事：</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant V as verify 阶段
+    participant T as test_prod.py
+    participant C as common/assertion.py
+    participant S as mall4j 后端
+    Note over V,T: D6 留下的代码（错误）
+    T->>C: assert_business_code(resp, 200)
+    C->>C: expected_code = 200 (int)
+    C->>S: resp.json()
+    S-->>C: {"code": "00000", ...}
+    C-->>T: assert str("00000") == str(200)<br/>= "00000" == "200"<br/>= False FAIL
+    Note over V,T: D7 修复后（正确）
+    T->>C: assert_business_code(resp, "00000")
+    C->>C: expected_code = "00000" (str)
+    C->>S: resp.json()
+    S-->>C: {"code": "00000", ...}
+    C-->>T: assert str("00000") == str("00000")<br/>= True PASS
+    style T fill:#fadbd8,stroke:#c0392b
+    style C fill:#d4e6f1,stroke:#2874a6
+    style S fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>3 处修复位置</strong>（<code>test_prod.py</code> 行 47 / 61 + 其他遗留）：</p>
+  <pre><code># === D6 错误版本 ===
+# test_prod.py 行 47
+def test_prod_info(self, api_client):
+    resp = api_client.get("/prod/prodInfo", query={"prodId": 1}, need_auth=False)
+    assert_business_code(resp, 200)   # ← BUG：数字 200
+
+# test_prod.py 行 61
+def test_get_sku_list(self, api_client):
+    resp = api_client.get("/sku/getSkuList", query={"prodId": 1}, need_auth=False)
+    assert_business_code(resp, 200)   # ← BUG：数字 200
+
+# === D7 修复版本 ===
+def test_prod_info(self, api_client):
+    resp = api_client.get("/prod/prodInfo", query={"prodId": 1}, need_auth=False)
+    assert_business_code(resp, "00000")   # ← FIXED：字符串 "00000"
+
+def test_get_sku_list(self, api_client):
+    resp = api_client.get("/sku/getSkuList", query={"prodId": 1}, need_auth=False)
+    assert_business_code(resp, "00000")   # ← FIXED：字符串 "00000"</code></pre>
+  <div class="interview">
+    <div class="who">业务码金句</div>
+    "<strong>业务码是字符串不是数字</strong>"——这是 mall4j 后端 <code>ServerResponseEntity</code> 的 Java 类型决定的。<code>assert_business_code(resp, 200)</code> 永远 FAIL（"00000" ≠ 200）。D5 Postman v3.0 已踩过同坑（D4 v2.1 全部 FAIL），D7 pytest 必须统一改字符串。D7 验收清单 #4 用 <code>grep -n 'assert_business_code.*200' testcases/test_prod.py</code> 验证零匹配。
+  </div>
+
+  <h3>4.4 概念 4：Playwright 路径 1 降级（API 拿 token + cookie 注入 + 跳 home，绕过滑块）</h3>
+  <p>mall4v 前端登录链路（<code>front-end/mall4v/src/views/common/login/index.vue</code> 行 106-130）有<strong>三层障碍</strong>：</p>
+  <ol>
+    <li><strong>blockPuzzle 滑块验证码</strong>（<code>@/components/verifition/Verify.vue</code>）—— 第三方 aj-captcha 组件，绕过难度高（轨迹识别 + 后端二次校验）</li>
+    <li><strong>AES-ECB-PKCS7 加密</strong>（<code>crypto.js</code>）—— 密码 <code>encrypt(password)</code> 走前端 AES；Python 端已用 <code>common/mall4j_aes.py</code> 兼容</li>
+    <li><strong>路由跳转 + cookie 注入</strong>—— 登录成功后 <code>cookie.set('Authorization', data.accessToken)</code> + <code>router.replace({ name: 'home' })</code></li>
+  </ol>
+  <p>D7 推荐<strong>路径 1</strong>：完全绕开滑块 + AES 加密，只验证"cookie 注入 + 路由跳转 + 截图存证"：</p>
+  <pre class="mermaid">
+sequenceDiagram
+    participant U as UI 用例
+    participant A as ApiClient
+    participant S as mall4j 后端
+    participant P as Playwright page
+    participant V as mall4v dev server
+    Note over U,S: 步骤 1：API 直接拿 token
+    U->>A: post("/adminLogin", {userName, passWord, sysType})
+    A->>A: _encrypt("123456") AES 兼容
+    A->>S: POST /adminLogin + 加密密码
+    S-->>A: 200 + {"code":"00000", "data":{"accessToken":"xxx"}}
+    A-->>U: accessToken = "xxx"
+    Note over U,P: 步骤 2：注入 cookie + 跳首页
+    U->>P: context.add_cookies({name:"Authorization", value:"xxx", url:admin_url})
+    U->>P: page.goto(admin_url + "/", timeout=5000)
+    P->>V: GET / (带 Authorization cookie)
+    V-->>P: 200 (Sa-Token 解析 cookie 鉴权通过 → 渲染首页)
+    Note over U,P: 步骤 3：等路由 + 截图
+    U->>P: page.wait_for_url("/home", timeout=3000)
+    U->>P: page.screenshot("ui-evidence/test_admin_login.png")
+    style U fill:#fadbd8,stroke:#c0392b
+    style A fill:#d4e6f1,stroke:#2874a6
+    style P fill:#eafaf1,stroke:#888
+    style V fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>test_admin_login 核心代码</strong>（<code>testcases/test_ui_login.py</code>）：</p>
+  <pre><code>@pytest.mark.ui
+@pytest.mark.skipif(not os.getenv("RUN_UI"), reason="UI 用例默认 skip；需 RUN_UI=1")
+class TestUiLogin:
+    def test_admin_login(self, page, api_client):
+        """admin 端：API 拿 token → 注入 cookie → 跳 admin 首页。"""
+        # 1. API 登录（admin/123456 默认凭据）
+        resp = api_client.post(
+            "/adminLogin",
+            json={
+                "userName": "admin",
+                "passWord": api_client._encrypt("123456"),
+                "sysType": "ADMIN",
+            },
+            need_auth=False,
+        )
+        assert resp.status_code == 200, f"admin 登录失败：{resp.text}"
+        token = resp.json()["data"]["accessToken"]
+
+        # 2. 注入 cookie + 跳首页
+        base = BasePage(page)
+        admin_url = os.getenv("ADMIN_WEB_URL", "http://localhost:8085")
+        base.inject_auth_cookie(token, admin_url)
+        base.goto(admin_url + "/", timeout=5000)
+        base.wait_for_url("/home", timeout=3000)
+
+        # 3. 截图存证
+        base.screenshot("ui-evidence/test_admin_login.png")</code></pre>
+  <div class="interview">
+    <div class="who">路径 1 金句</div>
+    "<strong>UI 测试不一定要走前端表单</strong>"——路径 1 用 API 拿 token + cookie 注入等价于前端 <code>cookie.set('Authorization', token)</code>。优点：完全绕开滑块 + AES；缺点：没"真填表单"——D8 才上路径 2（<code>page.route("**/adminLogin", lambda r: r.fulfill(...))</code> + <code>page.route("**/captcha/**", ...)</code> mock + 真实填表单）。
+  </div>
+
+  <h3>4.5 概念 5：缺包优雅降级（conftest.py 顶层 try/except + 双层 skip）</h3>
+  <p>Playwright <code>pip install</code> 需要 150 MB + chromium 下载；用户本地可能没装。D7 <strong>必须</strong>保证：未装 Playwright 时 <code>pytest --collect-only</code> PASS，UI 用例 collect 时标 skip（不是 ERROR）。</p>
+  <p>D6 没踩过这个坑（D6 没用 Playwright）；D7 是新坑。修法分两层：</p>
+  <pre class="mermaid">
+graph TD
+    A["pytest --collect-only"] --> B{"playwright 已装?"}
+    B -- "否" --> C["_HAS_PLAYWRIGHT = False<br/>UI fixture 跳过"]
+    B -- "是" --> D["_HAS_PLAYWRIGHT = True<br/>正常 launch chromium"]
+    C --> E["test_ui_login.collect<br/>标 skip"]
+    D --> F["test_ui_login.collect<br/>正常 parametrize"]
+    F --> G{"RUN_UI=1?"}
+    G -- "否" --> H["双层 skip:<br/>skipif(not os.getenv('RUN_UI'))"]
+    G -- "是" --> I["正常执行 UI 用例<br/>拿截图"]
+    style C fill:#fef9e7,stroke:#888
+    style E fill:#fef9e7,stroke:#888
+    style H fill:#fef9e7,stroke:#888
+    style D fill:#d5f5e3,stroke:#1e8449
+    style I fill:#d5f5e3,stroke:#1e8449</pre>
+  <p><strong>双层 skip 实装</strong>（<code>conftest.py</code> 顶层 + <code>test_ui_login.py</code> 类装饰器）：</p>
+  <pre><code># === conftest.py 顶层（关键 —— 在 _load_env() 之后、其他 fixture 之前）===
+try:
+    from playwright.sync_api import sync_playwright  # type: ignore
+    _HAS_PLAYWRIGHT = True
+except ImportError:  # pragma: no cover
+    _HAS_PLAYWRIGHT = False
+
+
+@pytest.fixture(scope="session")
+def _playwright_browser():
+    """session 级 chromium launch；无 playwright 时 skip。"""
+    if not _HAS_PLAYWRIGHT:
+        pytest.skip(
+            "Playwright 未安装；UI 用例跳过。"
+            "安装: pip install playwright && playwright install chromium"
+        )
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        yield browser
+        browser.close()
+
+
+# === test_ui_login.py 类装饰器（双层 skip）===
+@pytest.mark.ui
+@pytest.mark.skipif(
+    not os.getenv("RUN_UI"),
+    reason="UI 用例默认 skip；需 RUN_UI=1 + Playwright 浏览器",
+)
+class TestUiLogin:
+    """即使 Playwright 装了，未设 RUN_UI=1 也 skip（避免无 dev server 时跑挂）。"""
+    ...</code></pre>
+  <div class="interview">
+    <div class="who">降级金句</div>
+    "<strong>框架不应该因为用户没装某个第三方包就跑不起来</strong>"——这是 api-auto 的设计底线：装 Playwright 跑 UI 测试 + 截图；不装 Playwright 也能跑接口测试，只丢 UI 装饰。L10 已落地 allure 优雅降级（allure_compat.py 74 行），L12 落地 Playwright 优雅降级（conftest.py 顶层 try/except）。双层 skip 保证 UI 用例默认 0 影响。
+  </div>
+
+  <h2 id="sec5">5. 动手练：5 分钟 pytest --collect-only 验证 54 用例</h2>
+  <p>学完概念后,5 分钟亲手跑一遍,<strong>这是 L12 的 win 产物</strong>——不需要后端启服务（<code>pytest --collect-only</code> 只收集不执行，5 yaml × N case + 3 手工 + 2 UI 全部 collect 到 54 条）。</p>
+  <ol>
+    <li><strong>任务 A：装依赖（可选）</strong>——<code>cd test-cases/api-auto</code> → <code>pip install -r requirements.txt</code>（含 pytest 8.3 / requests 2.32 / pyyaml 6.0.2 / playwright 1.47 / pytest-playwright 0.5.2）。**Playwright 不强求**——未装也能跑 collect-only。</li>
+    <li><strong>任务 B：copy env</strong>——<code>cp .env.example .env</code>（先不填，5 条商品 / 订单默认 skip）。</li>
+    <li><strong>任务 C：collect-only 全部</strong>——<code>pytest --collect-only testcases/</code>，应看到 <strong>54 tests collected</strong>（5 login yaml + 10 prod yaml + 3 prod 手工 + 8 cart + 8 order yaml + 2 order 手工 + 5 addr + 8 my_order + 2 user + 2 UI + 1 login 手工 ≈ 54）。</li>
+    <li><strong>任务 D：单独跑 yaml 驱动</strong>——<code>pytest -v testcases/test_prod.py</code>，看 10 条 yaml 参数化的展开（test_prod_info[case0] ~ test_prod_info[case9]）。<strong>如果 yaml 写错或 prod_id 占位</strong>，会看到 SKIPPED 标记。</li>
+    <li><strong>任务 E：验证业务码 bug 已修</strong>——<code>grep -n 'assert_business_code.*200' testcases/test_prod.py</code>，应<strong>无输出</strong>（证明 D6 留的数字 200 bug 已修）。</li>
+    <li><strong>任务 F：看 UI 缺包降级</strong>（可选）——故意 <code>pip uninstall playwright pytest-playwright</code>，再跑 <code>pytest --collect-only testcases/test_ui_login.py</code>，依然 collect 到 2 条 UI 用例但都标 SKIPPED——这就是优雅降级。</li>
+  </ol>
+  <h3>5.1 验证标准</h3>
+  <ul>
+    <li>✅ <code>pytest --collect-only testcases/</code> 输出 <strong>54 tests collected</strong>（含 skip + UI skip）</li>
+    <li>✅ <code>pytest -v testcases/test_prod.py</code> 看到 <code>test_prod_info[case0]</code> ~ <code>test_prod_info[case9]</code> 10 个 ID</li>
+    <li>✅ <code>grep -n 'assert_business_code.*200' testcases/test_prod.py</code> 无输出（bug 已修）</li>
+    <li>✅ 未装 playwright 时 collect-only 仍然 54 条</li>
+    <li>✅ UI 用例默认 skip（RUN_UI 未设时）</li>
+  </ul>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课,把任何卡点（SafeDict 与 jinja2 / str.format 的取舍 / 探针 helper 的 fixture 实装位置 / 业务码 String 类型为何反复踩 / UI 路径 1 与路径 2 的工程边界 / conftest 顶层 try/except 的副作用）抛给你的 AI 教师追问——单点困惑往往牵出整条"YAML 数据驱动 + UI 自动化"的工程链,问得越具体，回答越能反哺 M2-D8-001（UI POM + 80+ 用例补全）的可扩展基座。
+  </div>
+
+  <h2 id="sec6">6. 课堂小测（3 道单选）</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span><code>test_prod.py</code> 行 47/61 的 <code>assert_business_code(resp, 200)</code> 为什么是 bug？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) 200 是 HTTP 状态码不是业务码；assert_business_code 应该传 HTTP 状态码</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) mall4j 后端 <code>ServerResponseEntity.code</code> 字段是 String 类型（'00000'），不是 Integer 200；传 200 永远 FAIL（"00000" ≠ 200）</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) 200 是 UTF-8 编码错误，应该传 UTF8</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) pytest 不支持数字参数</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>UI 登录用例（test_admin_login / test_shop_login）为什么用路径 1（API 拿 token + cookie 注入）而不是真填表单？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) Playwright 不支持 fill() 操作</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 因为 mall4v 前端登录有三层障碍（blockPuzzle 滑块验证码 + AES-ECB-PKCS7 密码加密 + 路由跳转），路径 1 完全绕开滑块 + AES；cookie 注入等价于前端 cookie.set('Authorization', token)，是最稳的降级路径</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 因为 admin 端没有登录页</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 因为 UI 测试不需要走前端</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span><code>yaml_loader.substitute(value, mapping)</code> 为什么用 <code>SafeDict(mapping)</code> 而不是直接 <code>dict(mapping)</code>？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) SafeDict 是 Python 3.12 新特性，比 dict 快 10 倍</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) SafeDict 重写 <code>__missing__</code> 让缺 key 时返回 <code>{{key}}</code> 字面，避免 KeyError 崩溃；yaml 写错时下游用例 FAIL（不是 ERROR），用户立刻看到"哦 probe 没跑通"</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) SafeDict 是 yaml 库的内置类型</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) dict 不能用在 str.format_map 里</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div><a href="../lessons/0011-postman-full-chain.html">第 11 课 Postman 完整链路</a></div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0010-pytest-requests-testing.html">第 10 课 pytest + requests 起步（回顾 D6 骨架）</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../test-cases/api-auto/README.md">api-auto 框架说明（test-cases/api-auto/README.md §5 UI 自动化）</a></li>
+      <li><a href="../test-cases/api-auto/conftest.py">conftest.py fixture + 缺包兜底（test-cases/api-auto/conftest.py）</a></li>
+      <li><a href="../test-cases/api-auto/common/yaml_loader.py">yaml_loader SafeDict + substitute（test-cases/api-auto/common/yaml_loader.py）</a></li>
+      <li><a href="../test-cases/api-auto/common/ui_pages.py">Playwright BasePage（test-cases/api-auto/common/ui_pages.py）</a></li>
+      <li><a href="../test-cases/api-auto/data/cart_data.yaml">cart yaml 探针样例（test-cases/api-auto/data/cart_data.yaml）</a></li>
+      <li><a href="../test-cases/api-auto/data/addr_data.yaml">addr yaml 探针样例（test-cases/api-auto/data/addr_data.yaml）</a></li>
+      <li><a href="../test-cases/api-auto/testcases/test_ui_login.py">UI 登录用例（test-cases/api-auto/testcases/test_ui_login.py）</a></li>
+      <li><a href="../doc/3-API接口/M2-D7-001-feasibility.md">M2-D7-001 可行性预审（doc/3-API接口/M2-D7-001-feasibility.md）</a></li>
+      <li><a href="../doc/3-API接口/M2-D7-001-brief.md">M2-D7-001 实施 brief（doc/3-API接口/M2-D7-001-brief.md）</a></li>
+      <li><a href="../reference/0012-yaml-ui-cheatsheet.html">YAML + UI 速查卡（reference/0012-yaml-ui-cheatsheet.html）</a></li>
+      <li><a href="../learning-records/0012-yaml-ui.md">本课学习记录（learning-records/0012-yaml-ui.md）</a></li>
+      <li><a href="../CONTEXT.md">领域语言速查（CONTEXT.md §3 可测点速查）</a></li>
+      <li><a href="../feature_list.json">feature_list.json（M2-D7-001 行）</a></li>
+    </ul>
+    <div>第 12 课到这里就完成了——L10（pytest 起步 10 用例）+ L11（Postman 完整链路 40 用例）+ L12（pytest YAML 数据驱动 47 用例 + UI 起步 2 用例）= mall4j 接口 + UI 测试工程的"数据驱动 + 探针 + 业务码 String + UI 路径 1 + 缺包降级"完整闭环。下一课将进入 M2-D8-001（UI POM 完整化 + 接口补全至 80+ 用例）。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B(1), Q2=B(1), Q3=B(1) ===
+  var correctMap = { q1: '1', q2: '1', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec4', text: '回到第 4 节：再读"业务码 String 断言"——再读 3 处修复位置' },
+    q2: { href: '#sec4', text: '回到第 4 节：再读"Playwright 路径 1 降级"——三层障碍 + 示例代码' },
+    q3: { href: '#sec4', text: '回到第 4 节：再读"YAML 数据驱动 + {{var}} 模板替换"——SafeDict 实现' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs[i] ? false : true; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>

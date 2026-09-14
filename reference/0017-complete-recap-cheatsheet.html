@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>lesson 0017 速查卡 — mall4j 完整收尾 + 简历包</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+@page { size: A4; margin: 1.5cm; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 800px; margin: 0 auto; padding: 16px; line-height: 1.5; color: #1f2328; }
+h1 { font-size: 22px; border-bottom: 2px solid #2563eb; padding-bottom: 8px; }
+h2 { font-size: 18px; margin-top: 24px; color: #2563eb; border-left: 4px solid #2563eb; padding-left: 8px; }
+h3 { font-size: 15px; margin-top: 16px; color: #1f2328; }
+.card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin: 12px 0; background: #f9fafb; }
+.badge { display: inline-block; background: #2563eb; color: white; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 4px; }
+table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+th, td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: left; }
+th { background: #f3f4f6; }
+code { background: #f3f4f6; padding: 1px 4px; border-radius: 3px; font-family: monospace; font-size: 12px; }
+.highlight { background: #fef3c7; padding: 8px; border-left: 3px solid #f59e0b; margin: 8px 0; font-size: 13px; }
+.footer-meta { color: #6b7280; font-size: 12px; border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 24px; }
+</style>
+</head>
+<body>
+
+<h1>lesson 0017 · mall4j 完整收尾 + 简历包</h1>
+<p>
+<span class="badge">13/13 收官</span>
+<span class="badge">M5 简历</span>
+<span class="badge">3 GitHub 仓库就绪</span>
+<span class="badge">×2 原则</span>
+</p>
+
+<div class="card">
+<h2>卡片 1：13 features 完成清单</h2>
+<table>
+<tr><th>阶段</th><th>Feature</th><th>状态</th></tr>
+<tr><td>M0</td><td>HARNESS-001 harness 骨架</td><td>✅</td></tr>
+<tr><td>M1</td><td>D1 环境 / D2 90 用例 / D3 60+18 / D4 Postman / D5 v3.0</td><td>✅</td></tr>
+<tr><td>M2</td><td>D6 pytest / D7 YAML+UI / D8 POM+路径 2 / D9 CI</td><td>✅</td></tr>
+<tr><td>M3</td><td>D10 Locust 登录 / D11 阶梯调优</td><td>✅</td></tr>
+<tr><td>M5</td><td>D14 简历 v3 + 3 仓库 README</td><td>✅</td></tr>
+</table>
+<p><strong>注意</strong>：M4 mall-ai 是独立项目独立 harness，不在 mall4j feature_list。</p>
+</div>
+
+<div class="card">
+<h2>卡片 2：数字 ×2 原则校验（10 项）</h2>
+<table>
+<tr><th>数字项</th><th>实际</th><th>简历</th><th>校验</th></tr>
+<tr><td>功能用例</td><td>150 条</td><td>150 条</td><td>✅</td></tr>
+<tr><td>缺陷</td><td>18 个</td><td>18 个</td><td>✅</td></tr>
+<tr><td>接口用例</td><td>90 collected</td><td>80+ 核心</td><td>✅</td></tr>
+<tr><td>UI 场景</td><td>12 场景</td><td>12 核心</td><td>✅</td></tr>
+<tr><td>CI workflow</td><td>2 + 9 steps</td><td>接入 CI</td><td>✅</td></tr>
+<tr><td>Locust 跑次</td><td>24</td><td>3 场景阶梯</td><td>✅</td></tr>
+<tr><td>性能报告</td><td>120 文件</td><td>对比报告</td><td>✅</td></tr>
+<tr><td>Agent 用例</td><td>50 条</td><td>50 条</td><td>✅</td></tr>
+<tr><td>评测维度</td><td>4 维度</td><td>4 维度</td><td>✅</td></tr>
+<tr><td>测试场景</td><td>4 场景</td><td>4 场景</td><td>✅</td></tr>
+</table>
+<p><strong>铁律</strong>：所有数字 ≤ 实际产出 × 2，避免面试深问露馅。</p>
+</div>
+
+<div class="card">
+<h2>卡片 3：简历 6 段结构</h2>
+<ol>
+<li><strong>基本信息</strong>：姓名 / 学校 / 学历 / 邮箱 / 手机 / GitHub / 求职意向</li>
+<li><strong>专业技能（10 条）</strong>：对标学长 senior-resume.pdf</li>
+<li><strong>项目经历</strong>：项目 1 STAR 5 句 + 项目 2 STAR 4 句</li>
+<li><strong>教育经历</strong>：学校 / 学历 / 专业 / GPA</li>
+<li><strong>实习/实践</strong>：如无则"项目经历 + 课程设计"</li>
+<li><strong>自我评价</strong>：三段式（专业 + 学习 + 协作）</li>
+</ol>
+</div>
+
+<div class="card">
+<h2>卡片 4：3 个 GitHub 仓库矩阵</h2>
+<table>
+<tr><th>仓库</th><th>定位</th><th>内容</th><th>协议</th></tr>
+<tr><td><code>mall4j-test-practice</code></td><td>测试设计</td><td>用例 + 缺陷 + 报告 + 教学</td><td>AGPL-3.0</td></tr>
+<tr><td><code>mall4j-auto-test</code></td><td>自动化</td><td>接口 + UI + CI + 性能</td><td>AGPL-3.0</td></tr>
+<tr><td><code>agent-eval-practice</code></td><td>AI 测试</td><td>方法论 + 用例 + LLM-as-Judge</td><td>Apache-2.0</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>卡片 5：init-repo.sh 三模式</h2>
+<pre><code>bash init-repo.sh test-practice    # 填充测试设计
+bash init-repo.sh auto-test        # 填充自动化
+bash init-repo.sh agent-eval       # 填充 AI 评测（占位）</code></pre>
+<p><strong>设计</strong>：从主仓选择性复制 → 避免单仓 README 太长；协议不同分开管理。</p>
+</div>
+
+<div class="card">
+<h2>卡片 6：5 类高频追问答案框架</h2>
+<table>
+<tr><th>追问</th><th>答案核心</th></tr>
+<tr><td>为什么选 mall4j</td><td>业务贴近 + 体量合适 + 避免造轮子</td></tr>
+<tr><td>18 缺陷怎么发现</td><td>静态分析 + 业务反推 + 场景组合</td></tr>
+<tr><td>性能瓶颈怎么定位</td><td>TPS 拐点 + P99 退化 + 错误率类型 + 调优决策树</td></tr>
+<tr><td>接口框架怎么搭</td><td>5 层架构（common/data/api/testcases/报告）</td></tr>
+<tr><td>怎么测试 AI Agent</td><td>工作模式 + 4 维度 + 4 类用例 + LLM-as-Judge</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>卡片 7：投递闭环时间表</h2>
+<table>
+<tr><th>阶段</th><th>时间</th><th>动作</th></tr>
+<tr><td>日常实习</td><td>M2 达标后立即（已达成）</td><td>滚动投递 / 每周 15-20 家</td></tr>
+<tr><td>秋招</td><td>2026-09 ~ 11</td><td>中厂为主 / 刷经验</td></tr>
+<tr><td>春招</td><td>2027-02 ~ 04</td><td>全力冲刺 / 决胜局</td></tr>
+</table>
+<p class="highlight">⚠️ M2 即最低可投状态，不等"完美"。投递与后续阶段并行。</p>
+</div>
+
+<p class="footer-meta">第 17 课速查卡 · 13/13 收官 · 2026-09-14 · AGENTS.md §不变量 1/3</p>
+
+</body>
+</html>

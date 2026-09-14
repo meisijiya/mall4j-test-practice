@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>模块边界与可测点速查卡 · 第 3 课</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* A4 打印友好：紧凑边距 + 黑白可读 */
+    @media print {
+        body { font-size: 10.5pt; line-height: 1.35; }
+        main { max-width: none; padding: 0 6mm; }
+        section.card { break-inside: avoid; page-break-inside: avoid; margin: 0 0 0.6em; padding: 0.4em 0.6em; }
+        table { font-size: 9pt; }
+        th, td { padding: 0.2em 0.4em; }
+        pre { font-size: 9pt; padding: 0.3em 0.5em; }
+        h2 { font-size: 1.05rem; margin: 0.3em 0 0.2em; }
+        h3 { font-size: 0.95rem; margin: 0.25em 0 0.15em; }
+        a { color: var(--ink); border-bottom: 0; }
+      }
+  </style>
+</head>
+<body>
+<header>
+  <h1>模块边界与可测点速查卡</h1>
+  <p class="meta">第 3 课 · A4 打印友好 · 七大模块 + 五个横切关注点</p>
+</header>
+
+<main>
+
+  <section class="card">
+    <h2>1. 七大模块边界对照表</h2>
+    <p>来源：<code>CONTEXT.md</code> 第 17-28 行 + <code>doc/1-项目概览/3-后端模块说明.md</code>。业务归属 ≠ 包路径，测试用例必须按业务模块而非物理包来划分。</p>
+    <table>
+      <thead>
+        <tr>
+          <th>模块</th>
+          <th>源码包（用户端）</th>
+          <th>源码包（管理端）</th>
+          <th>测试归属（写在哪）</th>
+          <th>可测点（≥3）</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>商品与 SKU</strong></td>
+          <td><code>yami-shop-api/.../prod</code></td>
+          <td><code>yami-shop-admin/.../prod</code> + <code>yami-shop-service/.../ProdService</code></td>
+          <td>商品查询 / SKU 选择 / 库存扣减</td>
+          <td>① <code>/prod/page</code> 分页边界 ② <code>/prod/info/{id}</code> SKU 失效 ③ 库存=0 下单 ④ 上下架状态</td>
+        </tr>
+        <tr>
+          <td><strong>订单与支付</strong></td>
+          <td><code>yami-shop-api/.../order</code> + <code>.../pay</code></td>
+          <td><code>yami-shop-admin/.../order</code></td>
+          <td>状态机迁移 / 回调幂等 / 退款链路</td>
+          <td>① <code>/order/submit</code> 重复提交幂等 ② <code>/pay/normalPay</code> 回调重放 ③ <code>/refund/apply</code> 原路返回</td>
+        </tr>
+        <tr>
+          <td><strong>购物车</strong></td>
+          <td><code>yami-shop-api/.../cart</code></td>
+          <td>（无）</td>
+          <td>加车 / 改数 / 删除 / 优惠叠加</td>
+          <td>① <code>/cart/add</code> 库存校验 ② <code>/cart/update</code> 数量边界 ③ <code>/cart/delete</code> 失效商品</td>
+        </tr>
+        <tr>
+          <td><strong>会员</strong></td>
+          <td><code>yami-shop-api/.../member</code></td>
+          <td><code>yami-shop-admin/.../user</code></td>
+          <td>注册 / 登录 / 地址簿 / 余额</td>
+          <td>① <code>/register</code> 重复手机号 ② <code>/login</code> 错误密码 ③ <code>/addr/list</code> 地址簿越权</td>
+        </tr>
+        <tr>
+          <td><strong>权限</strong></td>
+          <td>（鉴权拦截所有 API）</td>
+          <td><code>yami-shop-security-admin</code> + <code>yami-shop-admin/.../sys</code></td>
+          <td>Sa-Token 鉴权 / 角色-菜单-数据权限</td>
+          <td>① 不带 token → 401 ② 过期 token → 401 ③ 普通用户越权 → 403 ④ 多角色菜单并集</td>
+        </tr>
+        <tr>
+          <td><strong>统计</strong></td>
+          <td>（无）</td>
+          <td><code>yami-shop-admin/.../stat</code></td>
+          <td>运营报表聚合查询</td>
+          <td>① <code>/stat/order</code> 时间窗越界 ② <code>/stat/prod</code> 空数据 ③ 大数据量聚合超时</td>
+        </tr>
+        <tr>
+          <td><strong>优惠券 / 营销</strong></td>
+          <td><code>yami-shop-api/.../coupon</code></td>
+          <td><code>yami-shop-admin/.../coupon</code></td>
+          <td>领取 / 使用 / 叠加规则</td>
+          <td>① <code>/coupon/receive</code> 券已领完 ② <code>/coupon/use</code> 互斥规则 ③ 并发抢券幂等</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>接口契约唯一可信源 = <code>yami-shop-api</code> 的 Knife4j</strong>，路径 <code>/doc.html</code>（默认 <code>localhost:8086/doc.html</code>）。管理端的 API 文档通常滞后，优先以用户端为准。</p>
+  </section>
+
+  <section class="card">
+    <h2>2. 鉴权（Sa-Token）四必测速查表</h2>
+    <p>来源：<code>doc/4-技术实现/1-权限体系.md</code>。每个接口测试都必须先过这四道关。</p>
+    <table>
+      <thead>
+        <tr><th>编号</th><th>场景</th><th>期望</th><th>触发代码入口</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>A1</strong></td><td>不带 token 调任意需要登录的接口</td><td>401 / <code>UNAUTHORIZED</code></td><td>Sa-Token 拦截器 → <code>AuthUtil.getToken()</code> 为空</td></tr>
+        <tr><td><strong>A2</strong></td><td>带过期 token 调接口</td><td>401 / <code>TOKEN_EXPIRED</code></td><td>Sa-Token 拦截器 → <code>Token timeout</code> 异常</td></tr>
+        <tr><td><strong>A3</strong></td><td>普通用户访问 admin 接口</td><td>403 / <code>FORBIDDEN</code></td><td><code>@PreAuthorize("@pms.hasPermission(...)")</code> 不匹配</td></tr>
+        <tr><td><strong>A4</strong></td><td>多角色用户登录（如运营 + 客服）</td><td>按 <code>tz_sys_menu</code> 的 <code>role_id</code> 取并集返回菜单</td><td><code>GET /sys/menu/nav</code> 返回 <code>menuList</code></td></tr>
+      </tbody>
+    </table>
+    <p class="hint">反模式警告：只测 A1 就声称"鉴权测过了"——A3（垂直越权，OWASP Top 10）和 A4（菜单越权）才是线上最常爆雷的点。</p>
+    <p class="hint">测试归属：conftest.py 造 4 个 fixture（<code>no_token</code> / <code>expired_token</code> / <code>user_token</code> / <code>admin_token</code>），每个接口测试至少覆盖 A1+A3。</p>
+  </section>
+
+  <section class="card">
+    <h2>3. 幂等三必测速查表（订单 / 支付 / 退款）</h2>
+    <p>来源：<code>CONTEXT.md</code> 第 37-40 行 + 第 2 课支付幂等三道关。资金流接口<strong>每一个都必须测幂等</strong>。</p>
+    <table>
+      <thead>
+        <tr><th>编号</th><th>场景</th><th>期望</th><th>代码入口</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>I1</strong></td><td>同一 orderNumber 重复点"提交订单"</td><td>仅成功一次，第二次返回"订单已存在"</td><td><code>OrderController.submitOrders</code> → <code>ConfirmOrderCache</code> + <code>tz_order</code> 唯一索引</td></tr>
+        <tr><td><strong>I2</strong></td><td>同一 payNo 多次到达</td><td>仅更新一次订单状态，后续回调幂等返回</td><td><code>PayNoticeController</code> + <code>OrderSettlementMapper.updateToPay()</code> 乐观锁 <code>version+1</code></td></tr>
+        <tr><td><strong>I3</strong></td><td>同一 refundNo 多次提交</td><td>仅退一次，<code>tz_order_refund.return_money_sts</code> 不重复置 1</td><td><code>RefundController.applyRefund</code> → <code>tz_order_refund</code> 唯一索引</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">反模式：只测"正常下单一次能成功"——这是单点通过，幂等路径完全没覆盖。</p>
+  </section>
+
+  <section class="card">
+    <h2>4. 分布式锁（Redisson）三必测速查表</h2>
+    <p>来源：<code>doc/4-技术实现/7-分布式锁.md</code>。mall4j 提供 <code>@RedisLock</code> 注解（基于 Redisson），但<strong>当前开源版业务代码里暂未发现实际使用点</strong>。即使没启用，测试用例仍要预留场景。</p>
+    <table>
+      <thead>
+        <tr><th>编号</th><th>场景</th><th>期望</th><th>失败模式</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>L1</strong></td><td>同一商品 100 并发扣减库存（库存预置 50）</td><td>最终库存 = -50 之前的 0，成功订单 = 50，<strong>不超卖</strong></td><td>没加锁 → 100 个请求都看到 stock=50 → 超卖 50 个</td></tr>
+        <tr><td><strong>L2</strong></td><td>同一订单号 50 并发提交</td><td>仅成功 1 次，其余返回"重复提交"</td><td>没加锁 → 同一订单被扣 2 次款</td></tr>
+        <tr><td><strong>L3</strong></td><td>锁过期时间边界：业务执行 4.9s</td><td>锁未失效，第二个请求被阻塞</td><td>锁过早释放 → 第二个请求抢到锁 → 并发问题</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">锁机制三要素：<code>key=redisson_lock:{lockName}:{SpEL解析结果}</code>，<strong>默认过期 5000ms</strong>，注解 <code>@RedisLock(lockName="stock", key="#prodId")</code>。</p>
+    <p class="hint">面试金句：Redis 分布式锁不是银弹，超时时间 + 业务执行时长必须配对；业务超 5 秒必须显式指定 <code>expire</code>。</p>
+  </section>
+
+  <section class="card">
+    <h2>5. 参数校验（Jakarta Validation）四必测速查表</h2>
+    <p>来源：<code>doc/4-技术实现/3-参数校验.md</code>。用 <code>@Valid</code> + <code>@NotNull</code> / <code>@NotBlank</code> 做参数校验，校验失败统一进 <code>ServerResponseEntity.fail(...)</code>。<strong>每个接口都至少 4 条参数校验用例</strong>。</p>
+    <table>
+      <thead>
+        <tr><th>编号</th><th>场景</th><th>期望</th><th>示例</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>V1</strong></td><td>必填字段缺失</td><td>4xx + <code>PARAM_MISSING</code></td><td>提交订单时不传 <code>userAddrId</code></td></tr>
+        <tr><td><strong>V2</strong></td><td>字段类型错误</td><td>4xx + <code>PARAM_TYPE_ERROR</code></td><td><code>price</code> 字段传字符串 <code>"abc"</code></td></tr>
+        <tr><td><strong>V3</strong></td><td>字段长度超限</td><td>4xx + <code>PARAM_LENGTH_OVER</code></td><td>商品名称传 1000 字符（限 200）</td></tr>
+        <tr><td><strong>V4</strong></td><td>枚举值非法</td><td>4xx + <code>PARAM_INVALID</code></td><td>订单状态传 <code>status=99</code>（仅 1-6 合法）</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">测试设计要点：每个字段一条用例（<strong>字段粒度</strong>）；边界值优先（必填字段 → 缺失/空串/<code>null</code>/空格；长度字段 → min-1/min/max/max+1）；错误信息 <code>msg</code> 必须包含"哪个字段错了"。</p>
+    <p class="hint">反模式：前端做校验就以为后端不用管——前端校验可绕过（curl / Postman / 自动化脚本），后端 <code>@Valid</code> 才是最后一道防线。</p>
+  </section>
+
+  <section class="card">
+    <h2>6. 分页边界（MyBatis-Plus PageParam）六必测速查表</h2>
+    <p>来源：<code>doc/4-技术实现/4-分页实现.md</code>。基于 MyBatis-Plus <code>PageParam&lt;T&gt;</code>，默认 <code>current=1 / size=10</code>，<code>size</code> 最大限制 = 100。<strong>所有分页接口都至少 6 条边界用例</strong>。</p>
+    <table>
+      <thead>
+        <tr><th>编号</th><th>入参</th><th>期望</th><th>验证点</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>P1</strong></td><td><code>current=0</code></td><td>兜底为 1 或返回 400</td><td>MyBatis-Plus 是否 <code>current &lt; 1</code> 自动修正</td></tr>
+        <tr><td><strong>P2</strong></td><td><code>current=-1</code></td><td>返回 400（非法参数）</td><td>Jakarta Validation <code>@Min(1)</code> 是否生效</td></tr>
+        <tr><td><strong>P3</strong></td><td><code>size=0</code></td><td>兜底为 10 或返回 400</td><td>默认值兜底逻辑</td></tr>
+        <tr><td><strong>P4</strong></td><td><code>size=99999</code></td><td>兜底为 100 或返回 400</td><td><code>size &gt; 100</code> 截断逻辑</td></tr>
+        <tr><td><strong>P5</strong></td><td>总记录数 = 0</td><td>返回空列表 + <code>total=0</code></td><td>空数据路径</td></tr>
+        <tr><td><strong>P6</strong></td><td>总记录数 = 1</td><td><code>total=1</code> + <code>records.length=1</code> + 分页器显示 1 页</td><td>单数据路径</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">复杂关联分页陷阱：订单明细分页（<code>OrderServiceImpl.pageOrdersDetailByOrderParam()</code>）是手写 SQL + 单独 count SQL，<strong>join 后行数 ≠ 订单数</strong>。<code>total</code> 应等于订单数而非订单项数，<code>records.size</code> 可能 &gt; <code>PageParam.size</code>（一订单多行）。</p>
+    <p class="hint">反模式：只测 <code>current=1&amp;size=10</code>（默认参数）就声称"分页测过了"——P1-P4 一旦有 Bug 就是 P0 事故。</p>
+  </section>
+
+  <section class="card">
+    <h2>7. 反模式速查表（不要孤立测"点"）</h2>
+    <p>来源：<code>CONTEXT.md</code> 第 15 行——mall4j 要测"流"，不要测"点"，孤立用例不写进用例库。</p>
+    <table>
+      <thead>
+        <tr><th>反模式（孤立测点）</th><th>为什么错</th><th>正确做法（全链路）</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>"商品列表能加载"</td><td>单点通过，订单全流程可能挂</td><td>加载 → 加购 → 下单 → 支付</td></tr>
+        <tr><td>"登录接口返回 200"</td><td>只验状态码，没验 token 有效性</td><td>登录 → 拿 token → 调 <code>/sys/menu/nav</code> 验真能用</td></tr>
+        <tr><td>"支付回调能调通"</td><td>没验幂等，没验金额来源</td><td>回调 → 验签 → 幂等 → DB 更新 → 二次回调幂等返回</td></tr>
+        <tr><td>"退款能成功"</td><td>没验原路返回（微信单退到支付宝）</td><td>退款 → 查 <code>tz_order.pay_type</code> → 验退款渠道匹配</td></tr>
+      </tbody>
+    </table>
+    <p class="hint"><strong>判断标准</strong>：这条用例单独跑通 ≠ 业务能跑通。必须把"点"串成"流"才能进用例库。</p>
+  </section>
+
+  <section class="card">
+    <h2>8. 测试切入矩阵（模块 × 测试类型）</h2>
+    <p>每个模块新功能上线前，按这个矩阵逐项打钩——至少把"功能 + 接口 + 异常"三列打钩。</p>
+    <table>
+      <thead>
+        <tr><th>模块 \ 测试类型</th><th>功能</th><th>接口</th><th>UI</th><th>性能</th><th>异常</th></tr>
+      </thead>
+      <tbody>
+        <tr><td><strong>商品与 SKU</strong></td><td>CRUD + 上下架</td><td><code>/prod/page</code></td><td>列表页 + 详情页</td><td>1000 并发浏览</td><td>库存=0 / SKU 失效 / 下架</td></tr>
+        <tr><td><strong>订单与支付</strong></td><td>下单/支付/退款/取消</td><td><code>/order/submit</code> + <code>/pay/normalPay</code></td><td>用户中心 + 商家后台</td><td>200 并发下单（幂等）</td><td>重复 / 回调重放 / 超时</td></tr>
+        <tr><td><strong>购物车</strong></td><td>加车/改数/删除</td><td><code>/cart/add</code> + <code>/cart/update</code></td><td>购物车页</td><td>100 并发改数</td><td>库存不足 / 商品失效</td></tr>
+        <tr><td><strong>会员</strong></td><td>注册/登录/地址</td><td><code>/login</code> + <code>/addr/list</code></td><td>个人中心</td><td>500 并发登录</td><td>重复注册 / 错误密码 / token 过期</td></tr>
+        <tr><td><strong>权限</strong></td><td>角色/菜单/数据</td><td><code>/sys/menu/nav</code></td><td>管理后台登录</td><td>1000 并发过期 token</td><td>越权 / 菜单缺失</td></tr>
+        <tr><td><strong>统计</strong></td><td>报表聚合</td><td><code>/stat/order</code></td><td>运营报表页</td><td>大数据量聚合</td><td>时间窗越界 / 空数据</td></tr>
+        <tr><td><strong>优惠券</strong></td><td>领取/使用/叠加</td><td><code>/coupon/receive</code></td><td>领券中心</td><td>100 并发抢券</td><td>券已领完 / 互斥</td></tr>
+      </tbody>
+    </table>
+    <p class="hint">UI 自动化只覆盖"用户高频路径"（商品 → 下单 → 支付），管理后台逐页面写 UI ROI 太低。性能只跑资金流接口（下单/支付/退款），其余冒烟即可。</p>
+  </section>
+
+</main>
+
+<footer>
+  <p class="meta">配合 <a href="../lessons/0003-module-boundary-test-points.html">第 3 课 模块边界与可测点</a> 使用 · 配套测试设计方法论见第 4 课。</p>
+</footer>
+
+</body>
+</html>

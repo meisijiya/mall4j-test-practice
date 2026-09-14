@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 16 课 阶梯压测 + 瓶颈调优（mall4j M3-D11-001 收官）</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 16 课：阶梯压测 + 瓶颈调优（mall4j M3-D11-001 收官）</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 16 课</span>
+    <span class="tag accent">mall4j 12/12 收官</span>
+    <span class="tag">难度 ★★★★</span>
+    <span class="tag">时长 50 分钟</span>
+    <span class="tag">实战对象 M3-D11-001 3 场景 × 4 阶梯 × 2 轮 + Tomcat/Hikari/Lettuce 三池调优</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">为什么测试需要阶梯压测 + 调优复测（单点 ≠ 全景）</a></li>
+      <li><a href="#sec2">3 场景脚本设计（login/query/order 5 endpoint）</a></li>
+      <li><a href="#sec3">4 阶梯调度 + 间隔 30s（JVM 预热 + GC 触底）</a></li>
+      <li><a href="#sec4">TOP1 瓶颈定位 + 调优决策树（4 选 1）</a></li>
+      <li><a href="#sec5">3 道思考题 + mall4j 全阶段收尾</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 为什么测试需要阶梯压测 + 调优复测（单点 ≠ 全景）</h2>
+
+  <p>D10 单点压测 100u/60s 只能回答"100 用户能不能扛"，不能回答"系统极限在哪 / 拐点在哪 / 调优后提升多少"。</p>
+
+  <p><strong>阶梯压测</strong>回答的问题：</p>
+  <ul>
+    <li><strong>拐点</strong>：用户数从 200 涨到 500，TPS 不涨反降 → 系统极限在 200 用户</li>
+    <li><strong>瓶颈</strong>：CPU 100% / 内存 80% / DB 连接池 100% → 哪个先触顶</li>
+    <li><strong>调优空间</strong>：调优前 50u 时 P99=800ms，调优后 50u 时 P99=300ms → 提升 60%</li>
+  </ul>
+
+  <p><strong>反例</strong>：某电商调优后宣称"TPS 提升 3 倍"——但调优前是 100u/30s，调优后是 50u/60s（不同条件），面试官深问就露馅。</p>
+
+  <div class="mermaid">
+    sequenceDiagram
+      participant R as run-stepped.sh
+      participant L as locust
+      participant A as mall4j-api
+      participant J as JVM 监控
+      Note over R: 调优前 4 阶梯 × 3 场景
+      R->>L: 50u/60s login
+      L->>A: HTTP /adminLogin
+      A-->>J: jstat 5s 采样
+      L-->>R: stats L1-login-before
+      Note over R: 间隔 30s（JVM 缓存预热 + GC 触底）
+      R->>L: 100u/60s login
+      L->>A: HTTP
+      A-->>J: 采样
+      L-->>R: stats L2-login-before
+      Note over R: L3-L4 同理 + query + order
+      R->>R: tuning-jvm.sh 重启服务（应用 tuning-config）
+      Note over R: 调优后 4 阶梯 × 3 场景
+      R->>L: 50u/60s login
+      L-->>R: stats L1-login-after
+      Note over R: 生成对比报告 stepped-comparison.md
+  </div>
+
+  <h2 id="sec2">2. 3 场景脚本设计（login/query/order 5 endpoint）</h2>
+
+  <h3>2.1 场景 1：登录（locustfile_login.py 144 行）</h3>
+
+  <ul>
+    <li>复用 D10 locustfile.py 的 on_start adminLogin 套路</li>
+    <li>3 个 @task：view_prod_list 60% / view_prod_detail 30% / view_my_info 10%</li>
+    <li>NUM_USERS 环境变量支持阶梯覆盖（50/100/200/500）</li>
+  </ul>
+
+  <h3>2.2 场景 2：商品查询（locustfile_query.py 133 行）</h3>
+
+  <ul>
+    <li>不登录（匿名访问）—— 模拟未登录用户浏览</li>
+    <li>3 个 @task：view_prod_list 50% / view_prod_detail 30% / search_by_tag 20%</li>
+    <li>search_by_tag 调 /prod/prodListByTagId?tagId=N 测试缓存命中</li>
+  </ul>
+
+  <h3>2.3 场景 3：下单链路（locustfile_order.py 202 行）</h3>
+
+  <ul>
+    <li>on_start adminLogin 拿 token</li>
+    <li>3 个 @task：order_list 40% / order_detail 30% / cart_list 30%</li>
+    <li>故意不调 /order/submit（涉及资金事务，避免误测导致真实扣款）</li>
+  </ul>
+
+  <pre><code class="language-bash"># 3 场景独立跑次 × 4 阶梯 × 2 轮 = 24 个 locust 实例
+STEPS="50 100 200 500"
+for USERS in $STEPS; do
+    for SCENARIO in login query order; do
+        locust -f "locustfile_${SCENARIO}.py" \
+            --users $USERS --spawn-rate 10 --run-time 60s \
+            --headless --only-summary \
+            --html reports/{before,after}/L$((USERS/50))-${SCENARIO}-report.html \
+            --csv reports/{before,after}/L$((USERS/50))-${SCENARIO}-stats
+        sleep 30   # JVM 缓存预热 + GC 触底 + HikariCP 回收
+    done
+done</code></pre>
+
+  <h2 id="sec3">3. 4 阶梯调度 + 间隔 30s（JVM 预热 + GC 触底）</h2>
+
+  <h3>3.1 为什么 50/100/200/500 而不是 100/300/500/1000？</h3>
+  <ul>
+    <li><strong>50u</strong>：基线（无压力）</li>
+    <li><strong>100u</strong>：D10 单点压测（参考线）</li>
+    <li><strong>200u</strong>：2 倍 D10（找拐点）</li>
+    <li><strong>500u</strong>：极限（单实例 Spring Boot 容易 OOM）</li>
+  </ul>
+
+  <h3>3.2 为什么阶梯间隔 30s？</h3>
+  <ul>
+    <li><strong>JVM 缓存预热</strong>：HikariCP 连接池从 min-idle=10 涨到 maximum-pool-size=30 需 ~10s</li>
+    <li><strong>GC 触底</strong>：堆内存从用户瞬时峰值回落到 baseline 需 ~5s</li>
+    <li><strong>HikariCP 回收</strong>：超时连接回收 + 新连接预热 ~15s</li>
+    <li><strong>合计</strong>：30s 是"既不闲等也不卡 GC"的经验值</li>
+  </ul>
+
+  <h3>3.3 间隔期 JVM 状态采样命令</h3>
+
+  <pre><code class="language-bash"># 间隔期做 4 项采样，确认 JVM 真触底再跑下一阶梯
+PID=$(pgrep -f 'yami-shop-api.*\.jar' | head -1)
+echo "--- JDK 线程数 ---"   ; jstack $PID | grep -c '^"'
+echo "--- 堆内存 ---"      ; jstat -gc $PID | awk '{print "Eden="$6"K  Old="$8"K  Meta="$10"K"}'
+echo "--- GC 计数 ---"     ; jstat -gcutil $PID | awk 'NR==2 {print "YGC="$2"  FGC="$4}'
+echo "--- DB 连接池 ---"   ; curl -s http://127.0.0.1:8086/actuator/hikari | jq '.pools.HikariPool.active'
+# 任一项异常 → sleep 再补 30s，否则启动下一阶梯</code></pre>
+
+  <div class="mermaid">
+    flowchart LR
+      A[L1: 50u/60s] -->|sleep 30| B[L2: 100u/60s]
+      B -->|sleep 30| C[L3: 200u/60s]
+      C -->|sleep 30| D[L4: 500u/60s]
+      D -->|sleep 30| E[调优前 4 阶梯 × 3 场景完成]
+      E -->|tuning-jvm.sh 重启 + sleep 60| F[调优后 L1: 50u/60s]
+      F -->|sleep 30| G[L2: 100u/60s]
+      G -->|sleep 30| H[L3: 200u/60s]
+      H -->|sleep 30| I[L4: 500u/60s]
+      I -->|sleep 30| J[调优后完成]
+      J -->|generate-stepped-report.py| K[stepped-comparison.md]
+  </div>
+
+  <h2 id="sec4">4. TOP1 瓶颈定位 + 调优决策树（4 选 1）</h2>
+
+  <h3>4.1 调优决策树（mermaid）</h3>
+
+  <div class="mermaid">
+    flowchart TD
+      Start[TPS 不涨反降 / P99 > 2000ms] --> Q1{CPU 100%?}
+      Q1 -->|Yes| Q2{线程 dump 有 BLOCKED?}
+      Q1 -->|No| Q3{内存 80%?}
+      Q2 -->|Yes| Lock[锁竞争<br/>调优: 代码层加锁粒度<br/>❌ 改 Java 违反 AGPLv3]
+      Q2 -->|No| CPU[CPU bound<br/>调优: 线程池 200→400]
+      Q3 -->|Yes| Q4{GC 频繁?}
+      Q3 -->|No| Q5{DB 连接池满?}
+      Q4 -->|Yes| GC[JVM GC<br/>调优: -Xmx1g + G1GC<br/>MaxGCPauseMillis=200]
+      Q4 -->|No| Mem[内存泄漏<br/>❌ 改 Java 违反 AGPLv3]
+      Q5 -->|Yes| DB[HikariCP<br/>调优: 10→30]
+      Q5 -->|No| Q6{Redis 连接池满?}
+      Q6 -->|Yes| Redis[Lettuce<br/>调优: 6→20]
+      Q6 -->|No| Other[业务逻辑<br/>❌ 改 Java 违反 AGPLv3]
+  </div>
+
+  <h3>4.2 mall4j 调优铁律：AGPLv3 不动 Java 源码</h3>
+
+  <ul>
+    <li>✅ <strong>可用</strong>：Tomcat 线程池 / HikariCP / Lettuce / JVM 参数（全部走 .properties + -Xmx）</li>
+    <li>❌ <strong>禁用</strong>：加锁粒度细化 / 内存泄漏修复 / 业务逻辑优化（违反 AGPLv3 不变量 1）</li>
+  </ul>
+
+  <h3>4.3 tuning-config.properties 关键 3 段</h3>
+
+  <pre><code class="language-properties"># 1. Tomcat 线程池（默认 200 → 400）
+server.tomcat.threads.max=400
+server.tomcat.threads.min-spare=50
+
+# 2. HikariCP 连接池（默认 10 → 30）
+spring.datasource.hikari.maximum-pool-size=30
+spring.datasource.hikari.minimum-idle=10
+
+# 3. Lettuce Redis 池（默认 6 → 20）
+spring.redis.lettuce.pool.max-active=20
+spring.redis.lettuce.pool.max-idle=10</code></pre>
+
+  <h3>4.4 tuning-jvm.sh 应用方式</h3>
+
+  <pre><code class="language-bash">#!/usr/bin/env bash
+set -euo pipefail
+pkill -f "yami-shop-api.*\.jar" || echo "ℹ️ 无旧 java 进程"
+
+java -jar yami-shop-api/target/yami-shop-api-0.0.1-SNAPSHOT.jar \
+    --spring.profiles.active=dev \
+    --spring.config.additional-location=file:./tuning-config.properties \
+    -Xmx1g -XX:+UseG1GC -XX:MaxGCPauseMillis=200 \
+    > api.log 2>&1 &
+
+echo "✅ 调优后 API 启动"
+sleep 30
+curl -s http://127.0.0.1:8086/doc.html > /dev/null && echo "✅ API ready"</code></pre>
+
+  <h2 id="sec5">5. 思考题 + mall4j 全阶段收尾</h2>
+
+  <div class="quiz">
+    <p><strong>Q1</strong>：4 阶梯间隔 30s 是闲等还是有意义？答：JVM 缓存预热（HikariCP 连接池从 min-idle 涨到 maximum-pool-size）+ GC 触底（堆内存回落）+ 连接池回收（超时连接回收）—— 30s 是经验值，不是闲等</p>
+    <p><strong>Q2</strong>：调优决策树第一步看 CPU 还是内存？答：CPU 100% 是第一信号（JVM 线程 dump 有 BLOCKED → 锁竞争 / 无 BLOCKED → CPU bound）；内存 80% 是第二信号（GC 频繁 → JVM GC / 不频繁 → 内存泄漏）</p>
+    <p><strong>Q3</strong>：mall4j 调优能改 Java 源码吗？答：❌ 不能（AGPLv3 不变量 1）；调优全部走 .properties（Tomcat 线程池 / HikariCP / Lettuce）+ JVM 参数（-Xmx1g + G1GC）—— 不动 yami-shop-* Java 文件</p>
+  </div>
+
+  <h3>5.1 简历可写数字（谨慎 ×2 原则）</h3>
+
+  <ul>
+    <li>"设计 4 阶梯 Locust 压测（50/100/200/500）+ 3 场景 × 2 轮 = 24 个 locust 实例"</li>
+    <li>"实测调优后 Tomcat 线程池 200→400 + HikariCP 10→30 + Lettuce 6→20，TPS/P95/P99 三维提升百分比"</li>
+    <li>"AGPLv3 不动 Java 源码；调优全走 .properties + JVM 参数"</li>
+  </ul>
+
+  <h3>5.2 mall4j 全阶段收尾总结（12 features done）</h3>
+
+  <table>
+    <tr><th>阶段</th><th>Features</th><th>关键产出</th></tr>
+    <tr><td>HARNESS</td><td>HARNESS-001</td><td>5 子系统骨架（AGENTS.md/CONTEXT.md/feature_list/progress/init.sh/handoff）</td></tr>
+    <tr><td>M1 功能接口</td><td>M1-D1/2/3/4/5</td><td>环境上线 + 150 用例 + 18 缺陷 + Postman v2.1/v3.0 40 用例 + 65 PASS</td></tr>
+    <tr><td>M2 双自动化</td><td>M2-D6/7/8/9</td><td>pytest 90 用例 + POM 7 类 + UI 路径 2 + CI 工作流 10 文件</td></tr>
+    <tr><td>M3 性能调优</td><td>M3-D10/11</td><td>Locust 单点 9 文件 + 阶梯 + 调优 12 文件</td></tr>
+    <tr><td>教学</td><td>16 课 + 14 cheatsheet + 15 learning-records</td><td>业务理解 5 课 + 用例设计 3 课 + 接口自动化 4 课 + UI POM 1 课 + CI 1 课 + Locust 2 课</td></tr>
+  </table>
+
+  <h3>5.3 实战建议（用户本机）</h3>
+
+  <ul>
+    <li>第 1 步：装 locust：`pip install -r test-cases/perf/requirements-locust.txt`</li>
+    <li>第 2 步：启 mall4j：`bash test-cases/perf/stepped/tuning-jvm.sh`（应用调优前配置）</li>
+    <li>第 3 步：跑阶梯：`cd test-cases/perf/stepped && bash run-stepped.sh`（12 个 locust 实例 × 60s + 30s 间隔）</li>
+    <li>第 4 步：看对比：`cat reports/stepped-comparison.md`</li>
+    <li>第 5 步：实跑 ~25 分钟（含 24 个 locust + 重启 + 间隔）</li>
+  </ul>
+
+</main>
+
+<footer>
+  <div class="foot-row">
+    <div class="label">上一课</div>
+    <div><a href="../lessons/0015-locust-performance-testing.html">第 15 课 Locust 性能压测（M3-D10-001）</a></div>
+  </div>
+  <div class="foot-row">
+    <div class="label">下一课</div>
+    <div><a href="../lessons/0017-mall4j-complete-recap.html">第 17 课 mall4j 全阶段收尾 + 简历包（第 17 课待 M4 简历阶段启动）</a></div>
+  </div>
+  <p class="copyright">mall4j M3-D11-001 · 12/12 features done · 阶梯压测 + 调优复测 · AGPLv3 边界 100% 守</p>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>第 1 课 mall4j 业务全貌</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <style>
+    /* HTML 渲染约定：quiz 反馈默认隐藏，仅由 JS 切换 */
+    .quiz-feedback { display: none; }
+  </style>
+</head>
+<body>
+
+<main class="lesson">
+
+  <h1>第 1 课：mall4j 业务全貌——B2C 单商户电商 + 三端合一 + 五流贯通</h1>
+
+  <div class="tagblock">
+    <span class="tag accent">第 1 课</span>
+    <span class="tag">难度 ★☆☆☆☆</span>
+    <span class="tag">时长 25 分钟</span>
+    <span class="tag">实战对象 mall4j 源码阅读</span>
+  </div>
+
+  <aside class="toc" aria-label="目录">
+    <h3>目录</h3>
+    <ol>
+      <li><a href="#sec1">一句话定位</a></li>
+      <li><a href="#sec2">为什么是 mall4j</a></li>
+      <li><a href="#sec3">三端架构</a></li>
+      <li><a href="#sec4">五流贯通</a></li>
+      <li><a href="#sec5">核心交易链路</a></li>
+      <li><a href="#sec6">七大模块速查</a></li>
+      <li><a href="#sec7">业务理解 → 测试切入映射</a></li>
+      <li><a href="#sec8">课堂小测</a></li>
+      <li><a href="#sec9">下一步</a></li>
+    </ol>
+  </aside>
+
+  <h2 id="sec1">1. 一句话定位</h2>
+  <p>
+    mall4j 是 <strong>B2C 单商户电商开源系统</strong>，前后端分离，一套后端同时支撑管理后台、小程序、uni-app 三端前端，业务闭环覆盖商品 → 购物车 → 订单 → 支付 → 后台发货 → 数据统计全链路。
+  </p>
+  <blockquote>
+    来源：<code>doc/1-项目概览/1-项目介绍.md</code> 第 3 行：<em>"Mall4j 开源版是一个 Java B2C 单商户商城系统，采用前后端分离架构。"</em>
+  </blockquote>
+
+  <h2 id="sec2">2. 为什么是 mall4j（简历可写理由）</h2>
+  <p>来自 <code>D:/26测试/PROJECT_TARGET_BOOK.md</code> v3.0 选型论证：</p>
+  <table>
+    <thead>
+      <tr><th>维度</th><th>mall4j 的数据</th><th>简历卖点</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>业务清晰度</td><td>B2C 电商，覆盖商品/订单/支付/购物车/会员/权限</td><td>"电商系统全链路测试"可写</td></tr>
+      <tr><td>技术栈主流度</td><td>Spring Boot + Vue3 + Sa-Token + MyBatis-Plus + Redis + Redisson</td><td>测开岗主流栈全覆盖</td></tr>
+      <tr><td>文档完备度</td><td>官方 30 分钟启动路线 + 二开指南 + 数据模型</td><td>学习成本低</td></tr>
+      <tr><td>社区活跃度</td><td>⭐5.2k + 🍴1.3k + 2026-09 仍在更新</td><td>不怕被问"项目还活着吗"</td></tr>
+      <tr><td>测试覆盖度</td><td>Swagger 完备 + admin 后台 + Web 前端 = 4 件套全覆盖</td><td>一份项目支撑功能/UI/接口/性能</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">面试官一句话总结</div>
+    选 mall4j 是因为它业务真实、体量扛得住深问、技术栈主流、文档够自学，能在 14 天内做出"做深+扛追问"的作品集。
+  </div>
+  <p><strong>反问预案</strong>：为什么不用 mall-cook（配置复杂，14 天跑不通）/ 为什么不用自研 CRUD（star 太低，面试官会追问）。</p>
+
+  <h2 id="sec3">3. 三端架构：管理后台 / 用户端 / 移动端</h2>
+  <p>来源：<code>doc/1-项目概览/3-后端模块说明.md</code></p>
+  <pre><code>            ┌─────────────────────────────┐
+            │   yami-shop-admin  :8085    │
+            │   (管理后台后端)            │
+            └──────────────┬──────────────┘
+                           │
+            ┌──────────────▼──────────────┐
+            │   yami-shop-api    :8086    │
+            │   (用户端后端)              │
+            └──────────────┬──────────────┘
+                           │
+       ┌──────────────┬────┴────────┬──────────────┐
+       ▼              ▼             ▼              ▼
+  管理后台前端     小程序前端     H5 移动端      uni-app 前端
+  front-end/      front-end/    front-end/      front-end/
+  mall4v          mall4m        mall4m          mall4uni
+  (Vue3+Vite)     (微信小程序)   (H5)            (跨端编译)</code></pre>
+  <p><strong>两个后端入口</strong>：</p>
+  <table>
+    <thead><tr><th>后端模块</th><th>端口</th><th>调用方</th></tr></thead>
+    <tbody>
+      <tr><td><code>yami-shop-admin</code></td><td>8085</td><td>管理后台 <code>front-end/mall4v</code></td></tr>
+      <tr><td><code>yami-shop-api</code></td><td>8086</td><td>小程序 <code>front-end/mall4m</code> / H5 / uni-app</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">测试含义</div>
+    三端调用的是<strong>两套后端接口</strong>，接口契约各管各的。接口自动化必须<strong>分别建两套用例集</strong>，不能合并。
+  </div>
+
+  <h2 id="sec4">4. 五流贯通（资金流 / 信息流 / 物流 / 配置流 / 数据流）</h2>
+  <p>来源：<code>CONTEXT.md</code> 第 6-14 行（三流合一）+ 教材延展为五流。</p>
+  <p>测试用例必须落到流的交叉点，单点通过的孤立测试<strong>不写进用例库</strong>。</p>
+  <table>
+    <thead><tr><th>流</th><th>起点</th><th>终点</th><th>测试切入点</th></tr></thead>
+    <tbody>
+      <tr><td><strong>资金流</strong></td><td>支付（微信/支付宝/余额）</td><td>商家结算 → 退款原路返回</td><td>订单状态机、支付回调幂等、退款链路</td></tr>
+      <tr><td><strong>信息流</strong></td><td>用户下单</td><td>商家后台看到订单 → 仓库拣货</td><td>状态同步、消息推送</td></tr>
+      <tr><td><strong>物流</strong></td><td>商家发货</td><td>用户签收</td><td>物流公司对接、单号回填</td></tr>
+      <tr><td><strong>配置流</strong></td><td>管理后台配置（商品/角色/菜单）</td><td>用户端行为生效</td><td>配置热更新、缓存刷新、角色-菜单表</td></tr>
+      <tr><td><strong>数据流</strong></td><td>订单/支付/会员数据</td><td>统计报表聚合</td><td>SQL 聚合准确性、缓存一致性</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">反模式示例</div>
+    孤立测"商品列表能不能加载"——单点通过但业务不通，<strong>不写进用例库</strong>。
+  </div>
+
+  <h2 id="sec5">5. 核心交易链路（商品/SKU → 购物车 → 确认订单 → 提交订单 → 支付 → 后台发货）</h2>
+  <p>来源：<code>doc/6-核心业务/1-核心交易链路.md</code> 第 6 行。</p>
+  <pre><code>商品/SKU  →  加入购物车  →  确认订单  →  提交订单  →  支付  →  后台订单管理（发货）</code></pre>
+  <p><strong>每个环节的接口入口</strong>（来自核心交易链路文档第 23-26 行）：</p>
+  <table>
+    <thead><tr><th>环节</th><th>接口入口类</th><th>关键方法</th></tr></thead>
+    <tbody>
+      <tr><td>商品浏览</td><td><code>ProdController</code>、<code>SkuController</code></td><td>商品和 SKU 读取</td></tr>
+      <tr><td>购物车</td><td><code>ShopCartController</code></td><td>加车/改数/删除/统计</td></tr>
+      <tr><td>确认订单</td><td><code>OrderController</code></td><td><code>confirm</code>：生成快照写入 <code>ConfirmOrderCache</code></td></tr>
+      <tr><td>提交订单</td><td><code>OrderController</code></td><td><code>submitOrders</code>：从缓存创建订单+订单项</td></tr>
+      <tr><td>支付</td><td><code>PayController</code></td><td>生成支付流水 + 更新支付状态</td></tr>
+      <tr><td>后台订单</td><td>管理端 <code>OrderController</code></td><td>查询/详情/发货/导出</td></tr>
+    </tbody>
+  </table>
+  <p><strong>关键设计（影响测试）</strong>：</p>
+  <ul>
+    <li>确认订单结果先放 <code>ConfirmOrderCache</code>，提交时读取。</li>
+    <li>提交订单后<strong>清理确认订单缓存</strong>+购物车下单时清理购物车缓存。</li>
+    <li>支付成功<strong>发布事件</strong>，后续逻辑通过事件扩展——这是性能压测时需要关注的扩展点。</li>
+  </ul>
+  <div class="interview">
+    <div class="who">不建议新手先改的地方</div>
+    库存扣减/返还、支付状态流转、订单状态流转、订单自动取消/确认收货——影响交易一致性。
+  </div>
+
+  <h2 id="sec6">6. 七大模块速查</h2>
+  <p>来源：<code>doc/1-项目概览/1-项目介绍.md</code> 第 24-28 行 + <code>CONTEXT.md</code> 第 19-25 行整合。</p>
+  <table>
+    <thead><tr><th>#</th><th>模块</th><th>核心能力</th><th>测试侧重</th></tr></thead>
+    <tbody>
+      <tr><td>1</td><td><strong>商品 / SKU</strong></td><td>分类、规格、SKU、库存</td><td>商品查询、SKU 选择、库存扣减</td></tr>
+      <tr><td>2</td><td><strong>购物车</strong></td><td>加车、改数、删除、优惠叠加</td><td>缓存一致性、登录态边界</td></tr>
+      <tr><td>3</td><td><strong>订单</strong></td><td>确认/提交/状态机/取消</td><td>状态机、回调幂等、退款</td></tr>
+      <tr><td>4</td><td><strong>支付</strong></td><td>微信/支付宝/余额</td><td>支付流水、回调幂等</td></tr>
+      <tr><td>5</td><td><strong>会员</strong></td><td>注册/登录/地址/等级</td><td>鉴权链、地址簿边界</td></tr>
+      <tr><td>6</td><td><strong>权限</strong></td><td>角色、菜单、数据权限</td><td>Sa-Token、角色-菜单过滤</td></tr>
+      <tr><td>7</td><td><strong>统计</strong></td><td>运营报表聚合</td><td>SQL 准确性、缓存一致性</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">注意</div>
+    开源版第一阶段<strong>不包含</strong>营销、供应链、多商户、SaaS、跨境——面试被问到这些功能时直接说"开源版不支持"。
+  </div>
+
+  <h2 id="sec7">7. 业务理解 → 测试切入映射表</h2>
+  <table>
+    <thead><tr><th>业务概念</th><th>对应测试方法</th><th>对应测试件</th><th>简历句子</th></tr></thead>
+    <tbody>
+      <tr><td>商品/SKU 多规格</td><td>等价类 + 边界值</td><td>功能测试用例</td><td>"梳理 XX 模块 XX 个等价类"</td></tr>
+      <tr><td>购物车加车改数删</td><td>场景法 + 状态迁移</td><td>功能 + UI 自动化</td><td>"覆盖购物车 XX 个核心场景"</td></tr>
+      <tr><td>订单状态机</td><td>状态迁移图</td><td>接口自动化 + 边界用例</td><td>"设计订单状态机用例 XX 条"</td></tr>
+      <tr><td>支付回调</td><td>幂等性测试</td><td>接口自动化 + 异常场景</td><td>"验证支付回调幂等性"</td></tr>
+      <tr><td>角色-菜单权限</td><td>正交实验</td><td>UI + 接口</td><td>"设计 XX 个角色权限组合用例"</td></tr>
+      <tr><td>资金流/物流</td><td>全链路联测</td><td>接口自动化关联</td><td>"完成加购-下单-支付-发货全链路"</td></tr>
+      <tr><td>数据流统计</td><td>SQL 直查 + 接口对照</td><td>接口自动化</td><td>"运营报表准确性校验"</td></tr>
+      <tr><td>鉴权链（公共）</td><td>异常场景</td><td>接口 + UI + 性能通用</td><td>"覆盖 token 缺失/过期/越权"</td></tr>
+    </tbody>
+  </table>
+  <div class="interview">
+    <div class="who">求职亮点</div>
+    把"业务概念"翻译成"测试方法 + 测试件 + 简历句子"，是测开岗面试的核心能力。
+  </div>
+
+  <h2 id="sec8">8. 课堂小测</h2>
+  <p>每题选出唯一正确答案，做完点"提交本题"。答错会给出回链到对应章节。</p>
+
+  <form class="quiz" data-qid="q1" novalidate>
+    <div class="q-title"><span class="qno">Q1</span>mall4j 开源版最准确的业务定位是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="0">A) B2B 多商户电商系统，支持 SaaS 多租户模式</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="1">B) B2C 单商户电商系统，前后端分离一套后端多端共用</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="2">C) C2C 二手交易平台，专注个人卖家开店运营流量变现</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q1" value="3">D) O2O 本地生活平台，连接线下商家与用户端履约服务</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q2" novalidate>
+    <div class="q-title"><span class="qno">Q2</span>用户端后端 <code>yami-shop-api</code> 的本地默认端口是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="0">A) 8080</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="1">B) 8085</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="2">C) 8086</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q2" value="3">D) 9090</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <form class="quiz" data-qid="q3" novalidate>
+    <div class="q-title"><span class="qno">Q3</span>核心交易链路的正确顺序是？</div>
+    <ul class="quiz-opts">
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="0">A) 加购 → 确认订单 → 提交订单 → 商品/SKU → 支付 → 后台发货</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="1">B) 商品/SKU → 加购 → 确认订单 → 提交订单 → 支付 → 后台发货</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="2">C) 确认订单 → 商品/SKU → 加购 → 提交订单 → 支付 → 后台发货</label></li>
+      <li><label class="quiz-opt"><input type="radio" name="q3" value="3">D) 商品/SKU → 提交订单 → 加购 → 确认订单 → 支付 → 后台发货</label></li>
+    </ul>
+    <div class="quiz-actions"><button type="button" data-act="check">提交本题</button></div>
+    <div class="quiz-feedback" data-role="feedback"></div>
+  </form>
+
+  <h2 id="sec9">9. 下一步：进入三流合一与订单状态机</h2>
+  <p>本课建立了 mall4j 的"骨架认知"——定位、三端、五流、七模块、主链路。第 2 课将进入：</p>
+  <ul>
+    <li><strong>三流合一的资金流深度</strong>：订单状态机、支付回调幂等、退款原路返回。</li>
+    <li><strong>状态机画法</strong>：从代码层 <code>OrderController.submitOrders</code> → 缓存层 <code>ConfirmOrderCache</code> → 数据库层 <code>tz_order</code> 的完整状态迁移图。</li>
+    <li><strong>第一份接口用例</strong>：登录 → 加购 → 下单 → 支付，用 Postman 跑通最小闭环。</li>
+  </ul>
+  <p><strong>预习</strong>（可选）：读 <code>doc/6-核心业务/1-核心交易链路.md</code> 第 42-48 行关键设计部分，带着"哪些环节最影响交易一致性"的疑问进第 2 课。</p>
+  <div class="interview">
+    <div class="who">向 AI 教师追问</div>
+    看完本课，把任何卡点（术语/接口/状态机/简历卖点）抛给你的 AI 教师追问——单点困惑往往牵出一整条业务链，问得越具体，回答越能反哺你的测开作品集。
+  </div>
+
+</main>
+
+<footer class="lesson-foot">
+  <div class="nav">
+    <div class="cell prev">
+      <div class="label">上一课</div>
+      <div>这是第一课，没有上一课。</div>
+    </div>
+    <div class="cell next">
+      <div class="label">下一课</div>
+      <div><a href="../lessons/0002-three-flows-and-order-state-machine.html">第 2 课 三流合一与订单状态机</a></div>
+    </div>
+  </div>
+  <div class="reading">
+    <div class="label">推荐阅读</div>
+    <ul>
+      <li><a href="../../doc/6-核心业务/1-核心交易链路.md">doc/6-核心业务/1-核心交易链路.md</a></li>
+      <li><a href="../../PROJECT_TARGET_BOOK.md">PROJECT_TARGET_BOOK.md</a> 第二章</li>
+      <li><a href="../reference/0001-mall4j-business-glossary.html">业务术语速查表（reference/0001-mall4j-business-glossary.html）</a></li>
+    </ul>
+    <div>🎉 第 1 课到这里就完成了，去第 2 课继续打地基。</div>
+  </div>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // === correctMap: 0-indexed; Q1=B, Q2=C, Q3=B ===
+  var correctMap = { q1: '1', q2: '2', q3: '1' };
+
+  var chapterHint = {
+    q1: { href: '#sec1', text: '回到第 1 节：再读"一句话定位"' },
+    q2: { href: '#sec3', text: '回到第 3 节：再读"三端架构"的端口表' },
+    q3: { href: '#sec5', text: '回到第 5 节：再读"核心交易链路"顺序' }
+  };
+
+  function findSelected(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) {
+      if (inputs[i].checked) return inputs[i].value;
+    }
+    return null;
+  }
+
+  function paintOptions(form, selectedVal, isCorrect) {
+    var labels = form.querySelectorAll('.quiz-opt');
+    for (var i = 0; i < labels.length; i++) {
+      var inp = labels[i].querySelector('input[type="radio"]');
+      var v = inp.value;
+      labels[i].classList.remove('is-correct', 'is-wrong');
+      if (v === correctMap[form.dataset.qid]) {
+        labels[i].classList.add('is-correct');
+      } else if (v === selectedVal && !isCorrect) {
+        labels[i].classList.add('is-wrong');
+      }
+    }
+  }
+
+  function showFeedback(form, ok, hint) {
+    var fb = form.querySelector('.quiz-feedback');
+    fb.classList.remove('is-ok', 'is-err');
+    if (ok) {
+      fb.classList.add('is-ok');
+      fb.innerHTML = '答对了 ✓  继续下一题。';
+    } else {
+      fb.classList.add('is-err');
+      fb.innerHTML =
+        '答错了。' +
+        '已标红你的选项，绿色为正确选项。' +
+        '提示：<a href="' + hint.href + '">' + hint.text + '</a>';
+    }
+    fb.style.display = 'block';
+  }
+
+  function lockForm(form) {
+    var inputs = form.querySelectorAll('input[type="radio"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = true;
+    var btn = form.querySelector('button[data-act="check"]');
+    if (btn) btn.disabled = true;
+  }
+
+  function handleCheck(form) {
+    var qid = form.dataset.qid;
+    var selected = findSelected(form);
+    if (selected === null) {
+      var fb = form.querySelector('.quiz-feedback');
+      fb.classList.remove('is-ok');
+      fb.classList.add('is-err');
+      fb.innerHTML = '请先选择一个选项。';
+      fb.style.display = 'block';
+      return;
+    }
+    var ok = selected === correctMap[qid];
+    paintOptions(form, selected, ok);
+    showFeedback(form, ok, chapterHint[qid]);
+    lockForm(form);
+  }
+
+  // 事件委托：捕获所有提交按钮
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target.closest && ev.target.closest('button[data-act="check"]');
+    if (!btn) return;
+    var form = btn.closest('form.quiz');
+    if (!form) return;
+    handleCheck(form);
+  });
+})();
+</script>
+
+</body>
+</html>
